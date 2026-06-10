@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { supabase } from "./lib/supabase";
 import Sidebar from "./Sidebar";
-import Guards from "./Guards";
-import Attendance from "./Attendance";
-import Shifts from "./Shifts";
+import StaffRegistry from "./StaffRegistry";
+import LiveOps from "./LiveOps";
 import Incidents from "./Incidents";
+import Circulars from "./Circulars";
+import CorrectionRequests from "./CorrectionRequests";
+import SystemAccess from "./SystemAccess";
 import Analytics from "./Analytics";
 import Charts from "./Charts";
-import Users from "./Users";
 import { useToast } from "./Toast";
 
 function Dashboard({ role }) {
@@ -34,7 +35,7 @@ function Dashboard({ role }) {
           <div className="glass-card rounded-2xl p-6 mb-8">
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-800 capitalize">{page}</h1>
+                <h1 className="text-3xl font-bold text-gray-800 capitalize">{page.replace("-", " ")}</h1>
                 <p className="text-gray-500 mt-1">
                   Logged in as: <span className="font-medium capitalize text-blue-600">{role || "user"}</span>
                 </p>
@@ -54,25 +55,12 @@ function Dashboard({ role }) {
               <Charts />
             </>
           )}
-          {page === "guards" && <Guards />}
-          {page === "attendance" && <Attendance />}
-          {page === "shifts" && role === "admin" && <Shifts />}
+          {page === "live-ops" && <LiveOps role={role} />}
+          {page === "staff-registry" && role === "admin" && <StaffRegistry />}
+          {page === "system-users" && role === "admin" && <SystemAccess />}
           {page === "incidents" && <Incidents />}
-          {page === "patrols" && (
-            <div className="glass-card rounded-2xl p-12 text-center">
-              <div className="text-6xl mb-4">🚶</div>
-              <h2 className="text-2xl font-bold text-gray-700">Patrols Module</h2>
-              <p className="text-gray-400 mt-2">Coming soon — real-time patrol tracking</p>
-            </div>
-          )}
-          {page === "users" && role === "admin" && <Users />}
-          {page === "reports" && role === "admin" && (
-            <div className="glass-card rounded-2xl p-12 text-center">
-              <div className="text-6xl mb-4">📄</div>
-              <h2 className="text-2xl font-bold text-gray-700">Reports Module</h2>
-              <p className="text-gray-400 mt-2">Coming soon — analytics and reporting</p>
-            </div>
-          )}
+          {page === "circulars" && <Circulars role={role} />}
+          {page === "correction-requests" && <CorrectionRequests role={role} />}
         </div>
       </div>
     </>

@@ -2,30 +2,26 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 
-function Users() {
+function SystemAccess() {
   const [users, setUsers] = useState([]);
-  const [guards, setGuards] = useState([]);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("guard");
-  const [linkedGuardId, setLinkedGuardId] = useState("");
+  const [role, setRole] = useState("supervisor");
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const { showToast, ToastContainer } = useToast();
 
   async function fetchUsers() {
     try {
-      const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      // Fetch only admins and supervisors
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("role", ["admin", "supervisor"])
+        .order("created_at", { ascending: false });
       setUsers(data || []);
     } catch { showToast("Could not load users.", "error"); }
-  }
-
-  async function fetchGuards() {
-    try {
-      const { data } = await supabase.from("guards").select("*").order("name");
-      setGuards(data || []);
-    } catch { /* ignore */ }
   }
 
   function validate() {
@@ -36,7 +32,6 @@ function Users() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Enter a valid email";
     if (!password) errs.password = "Password is required";
     else if (password.length < 6) errs.password = "Min 6 characters";
-    if (role === "guard" && !linkedGuardId) errs.linkedGuardId = "Select a guard record";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -63,10 +58,11 @@ function Users() {
       if (!userId) { showToast("Could not create user account.", "error"); return; }
 
       if (savedSession) {
-        await supabase.auth.setSession({
+        const { error: sessionErr } = await supabase.auth.setSession({
           access_token: savedSession.access_token,
           refresh_token: savedSession.refresh_token,
         });
+        if (sessionErr) showToast("Session issue, please re-login.", "error");
       }
 
       const { error: profileError } = await supabase.from("profiles").insert([
@@ -74,29 +70,25 @@ function Users() {
       ]);
       if (profileError) { showToast("Error creating profile.", "error"); return; }
 
-      if (role === "guard" && linkedGuardId) {
-        await supabase.from("guards").update({ auth_user_id: userId }).eq("id", linkedGuardId);
-      }
-
       showToast(`User "${fullName.trim()}" created!`, "success");
-      setFullName(""); setEmail(""); setPassword(""); setRole("guard"); setLinkedGuardId("");
+      setFullName(""); setEmail(""); setPassword(""); setRole("supervisor");
       fetchUsers();
     } catch { showToast("Network error.", "error"); }
     finally { setLoading(false); }
   }
 
-  useEffect(() => { fetchUsers(); fetchGuards(); }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   function clearError(field) { setErrors((p) => ({ ...p, [field]: "" })); }
 
   return (
     <>
       <ToastContainer />
-      <div className="mt-10">
-        <h1 className="text-2xl font-bold mb-5 text-gray-800">User Management</h1>
+      <div className="mt-6">
+        <h1 className="text-2xl font-bold mb-5 text-gray-800">🛡️ Administrative Access Management</h1>
 
         <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-cyan-200">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700">👤 Add New User</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-700">👤 Create Admin / Supervisor Login</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm text-gray-500 mb-1">Full Name</label>
@@ -121,30 +113,16 @@ function Users() {
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Role</label>
-              <select value={role} onChange={(e) => { setRole(e.target.value); setLinkedGuardId(""); }}
+              <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="w-full h-12 border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-300 bg-white">
-                <option value="admin">Admin</option>
                 <option value="supervisor">Supervisor</option>
-                <option value="guard">Guard</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
-            {role === "guard" && (
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">Link to Guard Record</label>
-                <select value={linkedGuardId} onChange={(e) => { setLinkedGuardId(e.target.value); clearError("linkedGuardId"); }}
-                  className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition bg-white ${errors.linkedGuardId ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-cyan-300"}`}>
-                  <option value="">Select Guard</option>
-                  {guards.filter((g) => !g.auth_user_id).map((g) => (
-                    <option key={g.id} value={g.id}>{g.name} — {g.site}</option>
-                  ))}
-                </select>
-                {errors.linkedGuardId && <p className="text-red-500 text-sm mt-1">{errors.linkedGuardId}</p>}
-              </div>
-            )}
           </div>
           <button onClick={addUser} disabled={loading}
             className={`mt-5 px-6 py-3 rounded-lg text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-cyan-600 hover:bg-cyan-700"}`}>
-            {loading ? "Creating..." : "Add User"}
+            {loading ? "Creating..." : "Add Administrative User"}
           </button>
         </div>
 
@@ -156,27 +134,22 @@ function Users() {
                   <th className="text-left p-4 text-gray-600 font-semibold">Name</th>
                   <th className="text-left p-4 text-gray-600 font-semibold">Email</th>
                   <th className="text-left p-4 text-gray-600 font-semibold">Role</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Linked Guard</th>
                 </tr>
               </thead>
               <tbody>
                 {users.length === 0 ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-400">No users found.</td></tr>
-                ) : users.map((user) => {
-                  const linked = guards.find((g) => g.auth_user_id === user.id);
-                  return (
-                    <tr key={user.id} className="border-b hover:bg-gray-50 transition">
-                      <td className="p-4 font-medium">{user.full_name}</td>
-                      <td className="p-4">{user.email}</td>
-                      <td className="p-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium capitalize ${user.role === "admin" ? "bg-purple-100 text-purple-700" : user.role === "supervisor" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-gray-500">{linked ? linked.name : "—"}</td>
-                    </tr>
-                  );
-                })}
+                  <tr><td colSpan={3} className="p-8 text-center text-gray-400">No users found.</td></tr>
+                ) : users.map((user) => (
+                  <tr key={user.id} className="border-b hover:bg-gray-50 transition">
+                    <td className="p-4 font-medium">{user.full_name}</td>
+                    <td className="p-4">{user.email}</td>
+                    <td className="p-4">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${user.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                        {user.role}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -186,4 +159,4 @@ function Users() {
   );
 }
 
-export default Users;
+export default SystemAccess;

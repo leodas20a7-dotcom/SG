@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import {
   FaChartBar,
   FaUserShield,
@@ -7,20 +8,37 @@ import {
   FaShieldAlt,
   FaFileAlt,
   FaSignOutAlt,
+  FaMapMarkerAlt,
+  FaGlobeAsia,
 } from "react-icons/fa";
 
 const ALL_NAV = [
   { key: "dashboard", label: "Dashboard", icon: FaChartBar, roles: ["admin", "supervisor", "guard"] },
-  { key: "guards", label: "Guards", icon: FaUserShield, roles: ["admin", "supervisor"] },
-  { key: "attendance", label: "Attendance", icon: FaClipboardCheck, roles: ["admin", "supervisor"] },
-  { key: "shifts", label: "Shifts", icon: FaCalendarAlt, roles: ["admin"] },
-  { key: "incidents", label: "Incidents", icon: FaExclamationTriangle, roles: ["admin", "supervisor", "guard"] },
-  { key: "patrols", label: "Patrols", icon: FaShieldAlt, roles: ["admin", "supervisor"] },
-  { key: "users", label: "Users", icon: FaUserShield, roles: ["admin"] },
-  { key: "reports", label: "Reports", icon: FaFileAlt, roles: ["admin"] },
+  { key: "live-ops", label: "Live Tracking", icon: FaGlobeAsia, roles: ["admin", "supervisor"] },
+  { key: "staff-registry", label: "Staff Registry", icon: FaUserShield, roles: ["admin"] },
+  { key: "system-users", label: "System Access", icon: FaUserShield, roles: ["admin"] },
+  { key: "incidents", label: "Incident complaints", icon: FaExclamationTriangle, roles: ["admin", "supervisor", "guard"] },
+  { key: "circulars", label: "Circulars Board", icon: FaFileAlt, roles: ["admin", "supervisor", "guard"] },
+  { key: "correction-requests", label: "Correction Requests", icon: FaClipboardCheck, roles: ["admin", "supervisor"] },
 ];
 
 function Sidebar({ role, page, onNavigate, onLogout }) {
+  const [showNav, setShowNav] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const current = window.scrollY;
+      if (current > lastScrollY.current && current > 60) {
+        setShowNav(false);
+      } else {
+        setShowNav(true);
+      }
+      lastScrollY.current = current;
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const navItems = ALL_NAV.filter((item) => item.roles.includes(role));
 
@@ -44,11 +62,10 @@ function Sidebar({ role, page, onNavigate, onLogout }) {
                 <li
                   key={item.key}
                   onClick={() => onNavigate(item.key)}
-                  className={`cursor-pointer px-4 py-3 rounded-xl transition flex items-center gap-3 ${
-                    page === item.key
+                  className={`cursor-pointer px-4 py-3 rounded-xl transition flex items-center gap-3 ${page === item.key
                       ? "bg-white/80 text-blue-600 shadow-sm font-medium"
                       : "text-gray-500 hover:text-gray-800 hover:bg-white/40"
-                  }`}
+                    }`}
                 >
                   <Icon className="text-lg" />
                   <span>{item.label}</span>
@@ -68,7 +85,11 @@ function Sidebar({ role, page, onNavigate, onLogout }) {
       </div>
 
       {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 glass-card z-50 border-t border-white/30">
+      <div
+        className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200/50 transition-transform duration-300 ${showNav ? "translate-y-0" : "translate-y-full"
+          }`}
+        style={{ background: "rgba(255,255,255,0.97)", backdropFilter: "blur(12px)" }}
+      >
         <div className="flex justify-around items-center py-2">
           {navItems.slice(0, 5).map((item) => {
             const Icon = item.icon;
@@ -76,9 +97,8 @@ function Sidebar({ role, page, onNavigate, onLogout }) {
               <button
                 key={item.key}
                 onClick={() => onNavigate(item.key)}
-                className={`flex flex-col items-center gap-1 px-2 py-1 text-xs ${
-                  page === item.key ? "text-blue-600" : "text-gray-500"
-                }`}
+                className={`flex flex-col items-center gap-1 px-2 py-1 text-xs ${page === item.key ? "text-blue-600" : "text-gray-500"
+                  }`}
               >
                 <Icon className="text-lg" />
                 <span className="truncate max-w-[60px]">{item.label}</span>

@@ -16,9 +16,7 @@ function Shifts() {
   const [guards, setGuards] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [guardId, setGuardId] = useState("");
-  const [site, setSite] = useState("");
   const [shiftName, setShiftName] = useState("");
-  const [shiftDate, setShiftDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [errors, setErrors] = useState({});
@@ -51,10 +49,7 @@ function Shifts() {
   function validate() {
     const errs = {};
     if (!guardId) errs.guardId = "Select a guard";
-    if (!site.trim()) errs.site = "Site is required";
-    else if (site.trim().length < 2) errs.site = "Site must be at least 2 characters";
     if (!shiftName) errs.shiftName = "Select a shift type";
-    if (!shiftDate) errs.shiftDate = "Select a date";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -63,12 +58,14 @@ function Shifts() {
     if (!validate()) return;
     setLoading(true);
     try {
+      const selectedGuard = guards.find(g => String(g.id) === String(guardId));
+      const guardSite = selectedGuard?.site || "";
+
       const { error } = await supabase.from("shifts").insert([
         {
           guard_id: guardId,
-          site: site.trim(),
+          site: guardSite,
           shift_name: shiftName,
-          shift_date: shiftDate,
           start_time: startTime || null,
           end_time: endTime || null,
         },
@@ -79,8 +76,33 @@ function Shifts() {
         return;
       }
 
-      showToast("Shift assigned successfully!", "success");
-      setGuardId(""); setSite(""); setShiftName(""); setShiftDate("");
+      // ── Update guard's site and duty_location_id ──
+      if (selectedGuard) {
+        let locId = null;
+        if (guardSite) {
+          let { data: loc } = await supabase.from("duty_locations").select("id").eq("place_name", guardSite).maybeSingle();
+          if (!loc) {
+            const { data: newLoc } = await supabase.from("duty_locations").insert({
+              place_name: guardSite, latitude: 0, longitude: 0, radius_meters: 100
+            }).select("id").single();
+            loc = newLoc;
+          }
+          locId = loc?.id;
+        }
+        await supabase.from("guards").update({ site: guardSite, duty_location_id: locId }).eq("id", guardId);
+      }
+
+      // ── Auto-notify guard about their new shift ──
+      const guardName = selectedGuard?.name || "Guard";
+      const sTime = startTime || shiftTimings[shiftName]?.start || "—";
+      const eTime = endTime   || shiftTimings[shiftName]?.end   || "—";
+      await supabase.from("circulars").insert([{
+        title: `New Shift Assigned – ${guardName}`,
+        content: `⏰ Shift: ${shiftName}\n🕐 Time: ${sTime} → ${eTime}\n📍 Site: ${guardSite}\n\nPlease report on time.`,
+      }]);
+
+      showToast("Shift assigned & guard notified!", "success");
+      setGuardId(""); setShiftName("");
       setStartTime(""); setEndTime("");
       fetchShifts();
     } catch {
@@ -117,10 +139,31 @@ function Shifts() {
           return;
         }
       }
-      showToast("Shift timings saved to database!", "success");
+
+      // ── Auto-notify ALL guards about updated timings ──
+      const lines = Object.entries(shiftTimings)
+        .map(([sn, t]) => `• ${sn}: ${t.start} → ${t.end}`)
+        .join("\n");
+      await supabase.from("circulars").insert([{
+        title: "⏰ Shift Timings Updated",
+        content: `The following shift timings have been updated effective immediately:\n\n${lines}\n\nPlease note the new timings for your upcoming shifts.`,
+      }]);
+
+      showToast("Shift timings saved & all guards notified!", "success");
       setShowSettings(false);
     } catch {
       showToast("Network error. Please try again.", "error");
+    }
+  }
+
+  async function deleteShift(id, guardName) {
+    try {
+      const { error } = await supabase.from("shifts").delete().eq("id", id);
+      if (error) { showToast("Could not delete shift.", "error"); return; }
+      showToast(`Shift removed for ${guardName}.`, "success");
+      fetchShifts();
+    } catch {
+      showToast("Network error.", "error");
     }
   }
 
@@ -188,22 +231,10 @@ function Shifts() {
               >
                 <option value="">Select Guard</option>
                 {guards.map((guard) => (
-                  <option key={guard.id} value={guard.id}>{guard.name}</option>
+                  <option key={guard.id} value={guard.id}>{guard.name} — {guard.site || "No site"}</option>
                 ))}
               </select>
               {errors.guardId && <p className="text-red-500 text-sm mt-1">{errors.guardId}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">Site</label>
-              <input
-                type="text"
-                placeholder="Enter site"
-                value={site}
-                onChange={(e) => { setSite(e.target.value); clearError("site"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.site ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-purple-300"}`}
-              />
-              {errors.site && <p className="text-red-500 text-sm mt-1">{errors.site}</p>}
             </div>
 
             <div>
@@ -219,17 +250,6 @@ function Shifts() {
                 ))}
               </select>
               {errors.shiftName && <p className="text-red-500 text-sm mt-1">{errors.shiftName}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">Date</label>
-              <input
-                type="date"
-                value={shiftDate}
-                onChange={(e) => { setShiftDate(e.target.value); clearError("shiftDate"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.shiftDate ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-purple-300"}`}
-              />
-              {errors.shiftDate && <p className="text-red-500 text-sm mt-1">{errors.shiftDate}</p>}
             </div>
 
             <div>
@@ -267,21 +287,20 @@ function Shifts() {
         {/* TABLE */}
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+              <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b">
                   <th className="text-left p-4 text-gray-600 font-semibold">Guard</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Site</th>
                   <th className="text-left p-4 text-gray-600 font-semibold">Shift</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Date</th>
                   <th className="text-left p-4 text-gray-600 font-semibold">Start</th>
                   <th className="text-left p-4 text-gray-600 font-semibold">End</th>
+                  <th className="text-left p-4 text-gray-600 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {shifts.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-400">
+                    <td colSpan={5} className="p-8 text-center text-gray-400">
                       No shifts scheduled yet.
                     </td>
                   </tr>
@@ -289,15 +308,21 @@ function Shifts() {
                   shifts.map((shift) => (
                     <tr key={shift.id} className="border-b hover:bg-gray-50 transition">
                       <td className="p-4 font-medium">{shift.guards?.name}</td>
-                      <td className="p-4">{shift.site}</td>
                       <td className="p-4">
                         <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
                           {shift.shift_name}
                         </span>
                       </td>
-                      <td className="p-4 text-gray-500">{shift.shift_date}</td>
                       <td className="p-4">{shift.start_time || "—"}</td>
                       <td className="p-4">{shift.end_time || "—"}</td>
+                      <td className="p-4">
+                        <button
+                          onClick={() => deleteShift(shift.id, shift.guards?.name)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                        >
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -310,7 +335,7 @@ function Shifts() {
       {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="glass-card rounded-2xl p-6 w-[500px] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white/95 backdrop-blur-lg rounded-2xl p-6 w-[500px] max-h-[90vh] overflow-y-auto shadow-xl border border-white/50">
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-xl font-bold text-gray-800">⚙️ Shift Timing Settings</h2>
               <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>

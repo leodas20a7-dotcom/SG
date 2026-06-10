@@ -89,7 +89,7 @@ function Incidents() {
     <>
       <ToastContainer />
       <div className="mt-10">
-        <h1 className="text-2xl font-bold mb-5 text-gray-800">Incident Reporting</h1>
+        <h1 className="text-2xl font-bold mb-5 text-gray-800">🚨 Incident Complaints</h1>
 
         {/* FORM */}
         <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-red-200">

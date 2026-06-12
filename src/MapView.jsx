@@ -16,6 +16,7 @@ function MapView() {
   const [guardsOnDuty, setGuardsOnDuty] = useState([]);
   const [dutyLocations, setDutyLocations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showMap, setShowMap] = useState(false);
   const intervalRef = useRef(null);
   const { showToast, ToastContainer } = useToast();
 
@@ -95,44 +96,64 @@ function MapView() {
         <h1 className="text-2xl font-bold mb-5 text-gray-800">📍 Live Tracking Map</h1>
 
         <div className="glass-card rounded-2xl p-6 ring-1 ring-blue-200">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400">Loading map data...</div>
-          ) : (
-            <>
-              <div className="bg-gray-100 rounded-xl overflow-hidden" style={{ height: "500px" }}>
-                <MapContainer center={[centerLat, centerLng]} zoom={14} className="w-full h-full">
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  {dutyLocations.map((loc) => (
-                    <Marker key={`loc-${loc.id}`} position={[loc.latitude, loc.longitude]}>
-                      <Popup>
-                        <div className="text-sm">
-                          <p className="font-semibold text-gray-800">{loc.place_name}</p>
-                          <p className="text-gray-500">📍 {loc.latitude}, {loc.longitude}</p>
-                          <p className="text-gray-500">📏 {loc.radius_meters}m radius</p>
-                          {loc.shift_start && <p className="text-gray-500">🕐 {loc.shift_start} - {loc.shift_end || "—"}</p>}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                  {guardsOnDuty.map((guard) => (
-                    <Marker key={`guard-${guard.id}`} position={[guard.lat, guard.lng]}>
-                      <Popup>
-                        <div className="text-sm">
-                          <p className="font-semibold text-gray-800">🛡️ {guard.guardName}</p>
-                          {guard.locationName && <p className="text-gray-600">📍 {guard.locationName}</p>}
-                          <p className="text-gray-500">{guard.lat.toFixed(6)}, {guard.lng.toFixed(6)}</p>
-                          <p className="text-gray-500">🕐 {new Date(guard.time).toLocaleTimeString()}</p>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-              </div>
-              <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-500">
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-600 inline-block" /> Duty Locations ({dutyLocations.length})</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block animate-pulse" /> Guards On Duty ({guardsOnDuty.length})</span>
-              </div>
-            </>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-gray-700">🗺️ Live Map</h2>
+            <button
+              onClick={() => setShowMap(!showMap)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                showMap ? "bg-red-100 text-red-600 hover:bg-red-200" : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {showMap ? "Hide Map" : "Show Map"}
+            </button>
+          </div>
+          {showMap && (
+            loading ? (
+              <div className="text-center py-12 text-gray-400">Loading map data...</div>
+            ) : (
+              <>
+                <div className="bg-gray-100 rounded-xl overflow-hidden" style={{ height: "500px" }}>
+                  <MapContainer center={[centerLat, centerLng]} zoom={14} className="w-full h-full">
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    {dutyLocations.map((loc) => (
+                      <Marker key={`loc-${loc.id}`} position={[loc.latitude, loc.longitude]}>
+                        <Popup>
+                          <div className="text-sm">
+                            <p className="font-semibold text-gray-800">{loc.place_name}</p>
+                            <p className="text-gray-500">📍 {loc.latitude}, {loc.longitude}</p>
+                            <p className="text-gray-500">📏 {loc.radius_meters}m radius</p>
+                            {loc.shift_start && <p className="text-gray-500">🕐 {loc.shift_start} - {loc.shift_end || "—"}</p>}
+                          </div>
+                        </Popup>
+                      </Marker>
+                    ))}
+                    {guardsOnDuty.map((guard) => (
+                      <Marker key={`guard-${guard.id}`} position={[guard.lat, guard.lng]}>
+                        <Popup>
+                          <div className="text-sm">
+                            <p className="font-semibold text-gray-800">🛡️ {guard.guardName}</p>
+                            {guard.locationName && <p className="text-gray-600">📍 {guard.locationName}</p>}
+                            <p className="text-gray-500">{guard.lat.toFixed(6)}, {guard.lng.toFixed(6)}</p>
+                            <p className="text-gray-500">🕐 {new Date(guard.time).toLocaleTimeString()}</p>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    ))}
+                  </MapContainer>
+                </div>
+                <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-600 inline-block" /> Duty Locations ({dutyLocations.length})</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block animate-pulse" /> Guards On Duty ({guardsOnDuty.length})</span>
+                </div>
+              </>
+            )
+          )}
+          {!showMap && (
+            <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
+              <span className="text-3xl block mb-2">🗺️</span>
+              <p className="font-medium">Map is hidden</p>
+              <p className="text-sm mt-1">Click "Show Map" to view live tracking</p>
+            </div>
           )}
         </div>
 

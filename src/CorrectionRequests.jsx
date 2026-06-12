@@ -1,10 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
+import ConfirmModal from "./ConfirmModal";
+
+function AudioPlayer({ src }) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handleEnded = () => setPlaying(false);
+    audio.addEventListener("ended", handleEnded);
+    return () => audio.removeEventListener("ended", handleEnded);
+  }, []);
+
+  const togglePlay = () => {
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <audio ref={audioRef} src={src} className="hidden" />
+      <button 
+        onClick={togglePlay}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition shadow-sm ${
+          playing 
+            ? "bg-purple-500 text-white shadow-purple-200" 
+            : "bg-white border border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600"
+        }`}
+      >
+        <span className="text-sm">{playing ? "⏸️" : "▶️"}</span>
+        {playing ? "Playing..." : "Play Audio"}
+      </button>
+    </div>
+  );
+}
 
 function CorrectionRequests({ role, guardId }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { showToast, ToastContainer } = useToast();
 
   async function fetchRequests() {
@@ -41,6 +83,24 @@ function CorrectionRequests({ role, guardId }) {
     }
   }
 
+  async function clearHistory() {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("attendance_requests")
+        .delete()
+        .neq("status", "Pending");
+      if (error) throw error;
+      showToast("Resolved request history cleared successfully.", "success");
+      fetchRequests();
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setLoading(false);
+      setShowClearConfirm(false);
+    }
+  }
+
   useEffect(() => {
     fetchRequests();
   }, [guardId, role]);
@@ -49,9 +109,20 @@ function CorrectionRequests({ role, guardId }) {
     <>
       <ToastContainer />
       <div className="mt-6">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">
-          {role === "admin" ? "📥 Attendance Correction Requests" : "📋 Your Requests"}
-        </h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-gray-800">
+            {role === "admin" ? "📥 Attendance Correction Requests" : "📋 Your Requests"}
+          </h2>
+          {role === "admin" && (
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              disabled={loading}
+              className="bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 shrink-0"
+            >
+              <span>🗑️</span> Clear History
+            </button>
+          )}
+        </div>
 
         <div className="glass-card rounded-2xl overflow-hidden ring-1 ring-amber-200">
           <div className="overflow-x-auto">
@@ -88,7 +159,7 @@ function CorrectionRequests({ role, guardId }) {
                       <td className="p-4 text-sm text-gray-700 max-w-xs truncate">{req.message || "—"}</td>
                       <td className="p-4">
                         {req.audio_url ? (
-                          <audio src={req.audio_url} controls className="h-8 max-w-[180px]" />
+                          <AudioPlayer src={req.audio_url} />
                         ) : (
                           <span className="text-gray-400 text-xs">No recording</span>
                         )}
@@ -136,6 +207,13 @@ function CorrectionRequests({ role, guardId }) {
           </div>
         </div>
       </div>
+      {showClearConfirm && (
+        <ConfirmModal
+          message="Are you sure you want to clear all approved and rejected request history?"
+          onConfirm={clearHistory}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
     </>
   );
 }

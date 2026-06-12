@@ -1,0 +1,202 @@
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "./lib/supabase";
+import { FaBell } from "react-icons/fa";
+
+function Notifications({ role, guardId, onNavigate }) {
+  const [notifications, setNotifications] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const addNotification = (title, message, type) => {
+    setNotifications((prev) => [
+      { id: Date.now(), title, message, type, time: new Date() },
+      ...prev,
+    ].slice(0, 20)); // Keep only the latest 20
+    setUnreadCount((prev) => prev + 1);
+  };
+
+  useEffect(() => {
+    let channel;
+    const currentRole = role?.toLowerCase();
+    if (!currentRole) return;
+
+    // 1. Fetch existing unread notifications from DB
+    const fetchNotifications = async () => {
+      let query = supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_role", currentRole)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (currentRole === "guard" && guardId) {
+        // Guards only see notifications specifically for them (or general circulars where guard_id is null)
+        query = query.or(`guard_id.eq.${guardId},guard_id.is.null`);
+      }
+
+      const { data } = await query;
+      if (data) {
+        setNotifications(data.map(n => ({
+          ...n,
+          time: new Date(n.created_at) // map DB created_at to time
+        })));
+        setUnreadCount(data.filter(n => !n.is_read).length);
+      }
+    };
+
+    fetchNotifications();
+
+    // 2. Subscribe to NEW persistent notifications
+    const uniqueId = Math.random().toString(36).substring(7);
+    channel = supabase
+      .channel(`persistent-notifications-${uniqueId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_role=eq.${currentRole}` },
+        (payload) => {
+          const newNotif = payload.new;
+          
+          // Filter guard-specific notifications
+          if (currentRole === "guard" && newNotif.guard_id && newNotif.guard_id !== guardId) return;
+
+          console.log("New Persistent Notification Received:", newNotif);
+          setNotifications((prev) => [
+            { ...newNotif, time: new Date(newNotif.created_at) },
+            ...prev,
+          ].slice(0, 20));
+          setUnreadCount((prev) => prev + 1);
+        }
+      )
+      .subscribe((status, err) => {
+        console.log("Persistent Realtime Subscription Status:", status, err || "");
+      });
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [role, guardId]);
+
+  const toggleDropdown = async () => {
+    const nextState = !isOpen;
+    setIsOpen(nextState);
+    if (nextState && unreadCount > 0) {
+      setUnreadCount(0); // Mark as read instantly on UI
+      
+      // Update the DB in the background
+      const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+      if (unreadIds.length > 0) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true }))); // Optimistic update
+        await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
+      }
+    }
+  };
+
+  const clearHistory = async () => {
+    setNotifications([]);
+    setUnreadCount(0);
+    const currentRole = role?.toLowerCase();
+    if (!currentRole) return;
+    let query = supabase.from("notifications").delete().eq("user_role", currentRole);
+    if (currentRole === "guard" && guardId) {
+      query = query.or(`guard_id.eq.${guardId},guard_id.is.null`);
+    }
+    await query;
+  };
+
+  const handleNotificationClick = (notif) => {
+    if (onNavigate) {
+      if (notif.title === "New Issue Reported") onNavigate("correction-requests");
+      else if (notif.title === "New Incident Reported") onNavigate("incidents");
+      else if (notif.title === "Request Updated") onNavigate("requests");
+      else if (notif.title === "New Circular") onNavigate("circulars");
+    }
+    setIsOpen(false);
+  };
+
+  const getIcon = (type) => {
+    switch (type) {
+      case "warning": return "🚨";
+      case "success": return "✅";
+      case "error": return "❌";
+      default: return "📩";
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Bell Button */}
+      <button
+        onClick={toggleDropdown}
+        className="relative p-2.5 rounded-full hover:bg-gray-100 transition focus:outline-none"
+      >
+        <FaBell className="text-gray-600 text-xl" />
+        {unreadCount > 0 && (
+          <span className="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 border-2 border-white rounded-full animate-bounce">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown Panel */}
+      {isOpen && (
+        <div className="absolute right-0 mt-3 w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden transform origin-top-right transition-all">
+          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/80 flex justify-between items-center">
+            <h3 className="font-bold text-gray-800 text-sm">Notifications</h3>
+            {notifications.length > 0 && (
+              <button 
+                onClick={clearHistory}
+                className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition font-medium border border-transparent hover:border-red-100"
+              >
+                Clear History
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-80 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="py-8 px-4 text-center text-gray-400">
+                <div className="text-3xl mb-2 opacity-50">🔕</div>
+                <p className="text-sm">No new notifications</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {notifications.map((notif) => (
+                  <div 
+                    key={notif.id} 
+                    onClick={() => handleNotificationClick(notif)}
+                    className={`p-4 transition flex items-start gap-3 cursor-pointer hover:bg-gray-50 ${notif.is_read ? "bg-white" : "bg-blue-50/50"}`}
+                  >
+                    <span className="text-xl shrink-0 mt-0.5">{getIcon(notif.type)}</span>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">{notif.title}</p>
+                      <p className="text-xs text-gray-600 mt-1 leading-relaxed">{notif.message}</p>
+                      <p className="text-[10px] text-gray-400 mt-1.5 font-medium uppercase tracking-wider">
+                        {notif.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default Notifications;

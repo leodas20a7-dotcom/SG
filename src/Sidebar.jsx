@@ -7,7 +7,6 @@ import {
   FaExclamationTriangle,
   FaShieldAlt,
   FaFileAlt,
-  FaSignOutAlt,
   FaMapMarkerAlt,
   FaGlobeAsia,
 } from "react-icons/fa";
@@ -16,6 +15,7 @@ const ALL_NAV = [
   { key: "dashboard", label: "Dashboard", icon: FaChartBar, roles: ["admin", "supervisor", "guard"] },
   { key: "live-ops", label: "Live Tracking", icon: FaGlobeAsia, roles: ["admin", "supervisor"] },
   { key: "staff-registry", label: "Staff Registry", icon: FaUserShield, roles: ["admin"] },
+  { key: "guard-profiles", label: "Guard Profiles", icon: FaClipboardCheck, roles: ["admin", "supervisor"] },
   { key: "system-users", label: "System Access", icon: FaUserShield, roles: ["admin"] },
   { key: "incidents", label: "Incident complaints", icon: FaExclamationTriangle, roles: ["admin", "supervisor", "guard"] },
   { key: "circulars", label: "Circulars Board", icon: FaFileAlt, roles: ["admin", "supervisor", "guard"] },
@@ -73,14 +73,6 @@ function Sidebar({ role, page, onNavigate, onLogout }) {
               );
             })}
           </ul>
-
-          <button
-            onClick={onLogout}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition font-medium"
-          >
-            <FaSignOutAlt />
-            Logout
-          </button>
         </div>
       </div>
 

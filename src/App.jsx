@@ -4,6 +4,21 @@ import { supabase } from "./lib/supabase";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
 import GuardDuty from "./GuardDuty";
+import { ErrorBoundary } from "react-error-boundary";
+
+function ErrorFallback({ error }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
+      <div className="bg-white p-6 rounded-2xl shadow-xl max-w-lg w-full">
+        <h2 className="text-xl font-bold text-red-600 mb-4">Something went wrong</h2>
+        <pre className="text-sm bg-red-100 p-4 rounded-xl text-red-800 overflow-x-auto whitespace-pre-wrap">
+          {error.message}
+        </pre>
+        <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg">Reload Page</button>
+      </div>
+    </div>
+  );
+}
 
 function App() {
 
@@ -81,10 +96,18 @@ function App() {
   if (!session) return <Login setSession={setSession} />;
 
   if (role === "guard" && guardId) {
-    return <GuardDuty guardId={guardId} guardName={guardName} />;
+    return (
+      <ErrorBoundary FallbackComponent={ErrorFallback}>
+        <GuardDuty guardId={guardId} guardName={guardName} />
+      </ErrorBoundary>
+    );
   }
 
-  return <Dashboard role={role} />;
+  return (
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
+      <Dashboard role={role} />
+    </ErrorBoundary>
+  );
 }
 
 export default App;

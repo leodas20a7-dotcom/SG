@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import Camera from "./Camera";
 import { calcDistance, getLocation, uploadPhoto } from "./lib/geoUtils";
+import Notifications from "./Notifications";
+import Incidents from "./Incidents";
 
 /* ─── helpers ─────────────────────────────────────── */
 function fmt(iso) {
@@ -13,11 +15,52 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
+function AudioPlayer({ src }) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handleEnded = () => setPlaying(false);
+    audio.addEventListener("ended", handleEnded);
+    return () => audio.removeEventListener("ended", handleEnded);
+  }, []);
+
+  const togglePlay = () => {
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  return (
+    <div className="flex items-center mt-2">
+      <audio ref={audioRef} src={src} className="hidden" />
+      <button 
+        onClick={togglePlay}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition shadow-sm ${
+          playing 
+            ? "bg-purple-500 text-white shadow-purple-200" 
+            : "bg-white border border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600"
+        }`}
+      >
+        <span className="text-sm">{playing ? "⏸️" : "▶️"}</span>
+        {playing ? "Playing..." : "Play Audio"}
+      </button>
+    </div>
+  );
+}
+
 const TABS = [
-  { key: "duty",     label: "Duty Control",  icon: "📍", desc: "Check In / Out" },
-  { key: "history",  label: "Attendance",    icon: "📋", desc: "Your History"   },
-  { key: "requests", label: "Issues",        icon: "💬", desc: "Report Problem"  },
-  { key: "circulars",label: "Circulars",     icon: "📢", desc: "Announcements"  },
+  { key: "duty", label: "Duty Control", icon: "📍", desc: "Check In / Out" },
+  { key: "history", label: "Attendance", icon: "📋", desc: "Your History" },
+  { key: "requests", label: "Issues", icon: "💬", desc: "Report Problem" },
+  { key: "incidents", label: "Incidents", icon: "🚨", desc: "Report Incidents" },
+  { key: "circulars", label: "Circulars", icon: "📢", desc: "Announcements" },
 ];
 
 /* ─── Circular feed (read-only) ─── */
@@ -60,10 +103,14 @@ function MyRequests({ guardId }) {
       .order("created_at", { ascending: false })
       .then(({ data }) => setReqs(data || []));
   }, [guardId]);
-  if (reqs.length === 0) return null;
+  if (reqs.length === 0) return (
+    <div className="flex flex-col items-center py-12 text-gray-300">
+      <span className="text-4xl mb-3">🕒</span>
+      <p className="font-medium text-gray-400">No past requests found</p>
+    </div>
+  );
   return (
-    <div className="mt-6 space-y-3">
-      <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide">Past Requests</h3>
+    <div className="space-y-3">
       {reqs.map(r => (
         <div key={r.id} className="bg-white rounded-2xl p-4 border border-gray-100 flex justify-between items-start shadow-sm">
           <div className="flex-1 min-w-0 mr-3">
@@ -71,7 +118,7 @@ function MyRequests({ guardId }) {
               {r.request_type === "voice" ? "🎤 Voice" : "📝 Text"}
             </span>
             <p className="text-sm text-gray-700 truncate">{r.message || "Voice note"}</p>
-            {r.audio_url && <audio src={r.audio_url} controls className="mt-1 h-8 max-w-full" />}
+            {r.audio_url && <AudioPlayer src={r.audio_url} />}
           </div>
           <span className={`shrink-0 text-xs px-2.5 py-1 rounded-full font-semibold ${r.status === "Pending" ? "bg-amber-100 text-amber-700" : r.status === "Approved" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
             {r.status}
@@ -82,11 +129,129 @@ function MyRequests({ guardId }) {
   );
 }
 
+/* ─── Guard Profile & Documents ─── */
+function GuardProfilePanel({ guardId, onClose }) {
+  const [profile, setProfile] = useState(null);
+  const [uploading, setUploading] = useState("");
+  const [error, setError] = useState("");
+
+  async function loadProfile() {
+    try {
+      const { data } = await supabase.from("guards").select("*").eq("id", guardId).single();
+      setProfile(data);
+    } catch {
+      setError("Failed to load profile");
+    }
+  }
+
+  useEffect(() => { loadProfile(); }, [guardId]);
+
+  async function handleFileUpload(e, column) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(column);
+    setError("");
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${guardId}_${column}_${Date.now()}.${fileExt}`;
+      const { error: upErr } = await supabase.storage.from("guard-documents").upload(fileName, file);
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from("guard-documents").getPublicUrl(fileName);
+      
+      const { error: dbErr } = await supabase.from("guards").update({ [column]: publicUrl }).eq("id", guardId);
+      if (dbErr) throw dbErr;
+
+      loadProfile(); // refresh
+    } catch (err) {
+      setError("Upload failed: " + err.message);
+    }
+    setUploading("");
+  }
+
+  if (!profile) return <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">Loading...</div>;
+
+  const DOCS = [
+    { key: "doc_aadhaar", label: "Aadhaar Card", req: true },
+    { key: "doc_security_licence", label: "Security Licence", req: true },
+    { key: "doc_driving_licence", label: "Driving Licence", req: false },
+    { key: "doc_certificates", label: "Other Certificates", req: false },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-gray-900/50 backdrop-blur-sm flex items-end md:items-center justify-center md:p-4">
+      <div className="bg-white w-full max-w-md h-[90vh] md:h-auto md:max-h-[90vh] md:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:rounded-t-3xl rounded-t-3xl">
+          <h2 className="font-bold text-gray-800 text-lg">My Profile</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm text-gray-500 hover:bg-gray-50 transition">✕</button>
+        </div>
+        
+        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+          {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm">{error}</div>}
+          
+          {/* Profile Picture */}
+          <div className="flex flex-col items-center">
+            <div className="relative w-24 h-24 rounded-full border-4 border-white shadow-lg bg-gray-100 overflow-hidden mb-3">
+              {profile.profile_picture ? (
+                <img src={profile.profile_picture} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl">👤</div>
+              )}
+              {uploading === "profile_picture" && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" /></div>}
+            </div>
+            <h3 className="font-bold text-xl text-gray-800">{profile.name}</h3>
+            <p className="text-gray-500 text-sm mb-4">Security Officer</p>
+            <label className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold shadow-sm cursor-pointer hover:bg-blue-100 transition">
+              {profile.profile_picture ? "Change Photo" : "Upload Photo"}
+              <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, "profile_picture")} disabled={uploading !== ""} />
+            </label>
+          </div>
+
+          <hr className="border-gray-100" />
+
+          {/* Documents */}
+          <div>
+            <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider">Required Documents</h3>
+            <div className="space-y-3">
+              {DOCS.map(doc => {
+                const hasDoc = !!profile[doc.key];
+                return (
+                  <div key={doc.key} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${hasDoc ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500"}`}>
+                        {hasDoc ? "✅" : "📄"}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-800 text-sm">{doc.label}</p>
+                        <p className="text-xs text-gray-500">{hasDoc ? "Uploaded" : doc.req ? "Required" : "Optional"}</p>
+                      </div>
+                    </div>
+                    {hasDoc ? (
+                      <a href={profile[doc.key]} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs font-bold transition">View</a>
+                    ) : (
+                      <label className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer transition shadow-sm">
+                        {uploading === doc.key ? "..." : "Upload"}
+                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => handleFileUpload(e, doc.key)} disabled={uploading !== ""} />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════ */
 function GuardDuty({ guardId, guardName }) {
   const [activeTab, setActiveTab] = useState("duty");
+  const [showRequestHistory, setShowRequestHistory] = useState(false);
   const [dutyLocation, setDutyLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [gpsStatus, setGpsStatus] = useState(null);
@@ -110,6 +275,8 @@ function GuardDuty({ guardId, guardName }) {
   const [audioUrl, setAudioUrl] = useState("");
   const mediaRecorderRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [showProfile, setShowProfile] = useState(false);
 
   const [isOnTempDuty, setIsOnTempDuty] = useState(false);
   const [primaryLocation, setPrimaryLocation] = useState(null);
@@ -354,7 +521,7 @@ function GuardDuty({ guardId, guardName }) {
 
   const statusColour = gpsType === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-700"
     : gpsType === "warn" ? "bg-amber-50 border-amber-200 text-amber-700"
-    : "bg-blue-50 border-blue-200 text-blue-700";
+      : "bg-blue-50 border-blue-200 text-blue-700";
 
   /* ─── Duty Control panel (shared between mobile & desktop) ─── */
   const dutyPanel = (
@@ -420,11 +587,10 @@ function GuardDuty({ guardId, guardName }) {
           <button
             onClick={isOnDuty ? handleCheckOut : handleCheckIn}
             disabled={loading || (!dutyLocation && !isOnDuty)}
-            className={`w-full h-14 rounded-2xl text-white font-bold text-base transition-all shadow-md active:scale-[0.98] ${
-              loading ? "bg-gray-300 cursor-not-allowed" :
+            className={`w-full h-14 rounded-2xl text-white font-bold text-base transition-all shadow-md active:scale-[0.98] ${loading ? "bg-gray-300 cursor-not-allowed" :
               isOnDuty ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-200" :
-              "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-200"
-            }`}
+                "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-200"
+              }`}
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -498,11 +664,10 @@ function GuardDuty({ guardId, guardName }) {
                 {loc && <p className="text-xs text-blue-600 mt-0.5">📍 {loc}</p>}
                 <p className="text-xs text-gray-400 mt-0.5">In: {fmt(item.check_in_time)} &nbsp;·&nbsp; Out: {fmt(item.check_out_time)}</p>
               </div>
-              <span className={`text-xs px-3 py-1 rounded-full font-bold shrink-0 ml-3 ${
-                item.status === "Present" ? "bg-green-100 text-green-700" :
+              <span className={`text-xs px-3 py-1 rounded-full font-bold shrink-0 ml-3 ${item.status === "Present" ? "bg-green-100 text-green-700" :
                 item.status === "Absent" ? "bg-red-100 text-red-700" :
-                "bg-yellow-100 text-yellow-700"
-              }`}>
+                  "bg-yellow-100 text-yellow-700"
+                }`}>
                 {item.status}
               </span>
             </div>
@@ -512,12 +677,38 @@ function GuardDuty({ guardId, guardName }) {
     </div>
   );
 
-  const requestPanel = (
+  const requestPanel = showRequestHistory ? (
+    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-4 bg-gray-50/50">
+        <button 
+          onClick={() => setShowRequestHistory(false)}
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm border border-gray-200 text-gray-600 hover:bg-gray-50 transition shrink-0"
+        >
+          ←
+        </button>
+        <div>
+          <h2 className="font-bold text-gray-800 text-lg">Past Requests</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Your submitted issue history</p>
+        </div>
+      </div>
+      <div className="p-6">
+        <MyRequests guardId={guardId} />
+      </div>
+    </div>
+  ) : (
     <div className="space-y-4">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-50">
-          <h2 className="font-bold text-gray-800 text-lg">Report an Issue</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Missed check-in or GPS error? Let admin know.</p>
+        <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-gray-800 text-lg">Report an Issue</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Missed check-in or GPS error? Let admin know.</p>
+          </div>
+          <button 
+            onClick={() => setShowRequestHistory(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
+          >
+            🕒 History
+          </button>
         </div>
         <div className="p-6">
           <form onSubmit={submitRequest} className="space-y-4">
@@ -537,16 +728,15 @@ function GuardDuty({ guardId, guardName }) {
               <button
                 type="button"
                 onClick={recording ? stopRecording : startRecording}
-                className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg transition-all ${
-                  recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105"
-                }`}
+                className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg transition-all ${recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105"
+                  }`}
               >
                 {recording ? "⏹️" : "🎙️"}
               </button>
               <p className="text-xs text-gray-400">{recording ? "Recording… tap to stop" : "Tap mic to record"}</p>
               {audioUrl && (
                 <div className="flex flex-col items-center gap-2">
-                  <audio src={audioUrl} controls className="w-full max-w-sm h-8" />
+                  <audio src={audioUrl} controls className="w-full max-w-sm" />
                   <button type="button" onClick={() => { setAudioBlob(null); setAudioUrl(""); }} className="text-xs text-red-500 hover:underline">Remove recording</button>
                 </div>
               )}
@@ -559,7 +749,6 @@ function GuardDuty({ guardId, guardName }) {
           </form>
         </div>
       </div>
-      <MyRequests guardId={guardId} />
     </div>
   );
 
@@ -567,6 +756,7 @@ function GuardDuty({ guardId, guardName }) {
     duty: dutyPanel,
     history: historyPanel,
     requests: requestPanel,
+    incidents: <div className="-mt-10"><Incidents role="guard" guardId={guardId} /></div>,
     circulars: (
       <div className="space-y-4">
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
@@ -588,6 +778,8 @@ function GuardDuty({ guardId, guardName }) {
         />
       )}
 
+      {showProfile && <GuardProfilePanel guardId={guardId} onClose={() => setShowProfile(false)} />}
+
       {/* ╔════════════════════════════════╗
           ║  MOBILE LAYOUT (< md)          ║
           ╚════════════════════════════════╝ */}
@@ -605,11 +797,19 @@ function GuardDuty({ guardId, guardName }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowProfile(true)}
+                className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-sm hover:bg-blue-100 transition"
+                title="Profile & Documents"
+              >
+                👤
+              </button>
               {isOnDuty && (
                 <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-semibold">
                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live
                 </span>
               )}
+              <Notifications role="guard" guardId={guardId} onNavigate={setActiveTab} />
               <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Logout</button>
             </div>
           </div>
@@ -631,9 +831,8 @@ function GuardDuty({ guardId, guardName }) {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all relative ${
-                  activeTab === tab.key ? "text-blue-600" : "text-gray-400"
-                }`}
+                className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all relative ${activeTab === tab.key ? "text-blue-600" : "text-gray-400"
+                  }`}
               >
                 {activeTab === tab.key && (
                   <span className="absolute top-0 inset-x-3 h-0.5 bg-blue-600 rounded-b-full" />
@@ -654,12 +853,21 @@ function GuardDuty({ guardId, guardName }) {
           ║  DESKTOP / TABLET LAYOUT (≥ md)        ║
           ╚════════════════════════════════════════╝ */}
       <div className="hidden md:flex min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100">
-        
+
         {/* Desktop LEFT SIDEBAR */}
         <aside className="w-72 shrink-0 flex flex-col bg-white border-r border-gray-100 shadow-sm">
           {/* Brand / guard identity */}
           <div className="px-6 py-8 text-center border-b border-gray-50">
-            <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-4xl shadow-xl mb-4">🛡️</div>
+            <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-4xl shadow-xl mb-4 relative">
+              🛡️
+              <button 
+                onClick={() => setShowProfile(true)}
+                className="absolute -bottom-2 -right-2 w-8 h-8 bg-white text-blue-600 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 transition border border-gray-100"
+                title="Profile & Documents"
+              >
+                👤
+              </button>
+            </div>
             <h1 className="font-bold text-gray-800 text-xl">{guardName || "Guard"}</h1>
             <p className="text-sm text-gray-400 mt-0.5">Security Officer</p>
             {isOnDuty && (
@@ -689,11 +897,10 @@ function GuardDuty({ guardId, guardName }) {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left transition-all ${
-                  activeTab === tab.key
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-200"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left transition-all ${activeTab === tab.key
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                  }`}
               >
                 <span className="text-xl">{tab.icon}</span>
                 <div>
@@ -718,7 +925,7 @@ function GuardDuty({ guardId, guardName }) {
         {/* Desktop MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Desktop top bar */}
-          <header className="bg-white border-b border-gray-100 shadow-sm px-8 py-4 flex items-center justify-between shrink-0">
+          <header className="bg-white border-b border-gray-100 shadow-sm px-8 py-4 flex items-center justify-between shrink-0 relative z-50">
             <div>
               <h2 className="font-bold text-gray-800 text-xl">
                 {TABS.find(t => t.key === activeTab)?.icon} {TABS.find(t => t.key === activeTab)?.label}
@@ -733,6 +940,7 @@ function GuardDuty({ guardId, guardName }) {
                   <span className="text-emerald-600 text-xs">on duty</span>
                 </div>
               )}
+              <Notifications role="guard" guardId={guardId} onNavigate={setActiveTab} />
               <div className="text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-xl">
                 {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
               </div>

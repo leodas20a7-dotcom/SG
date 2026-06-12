@@ -301,7 +301,7 @@ function Attendance({ role, userGuardId }) {
 
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 border-b">
                   <th className="text-left p-4 text-gray-600 font-semibold">Guard</th>
@@ -324,9 +324,35 @@ function Attendance({ role, userGuardId }) {
                     <td className="p-4">{item.check_in_time ? new Date(item.check_in_time).toLocaleTimeString() : item.check_in || "—"}</td>
                     <td className="p-4">{item.check_out_time ? new Date(item.check_out_time).toLocaleTimeString() : item.check_out || "—"}</td>
                     <td className="p-4">
-                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${item.status === "Present" ? "bg-green-100 text-green-700" : item.status === "Absent" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>
-                        {item.status}
-                      </span>
+                      {(() => {
+                        let displayStatus = item.status;
+                        let statusClass = "bg-gray-100 text-gray-700";
+                        if (item.status === "Present") {
+                          if (item.check_in_time && !item.check_out_time) {
+                            const checkInDate = new Date(item.check_in_time).toDateString();
+                            const todayDate = new Date().toDateString();
+                            if (checkInDate === todayDate) {
+                              displayStatus = "On Duty";
+                              statusClass = "bg-blue-100 text-blue-700 font-bold";
+                            } else {
+                              displayStatus = "Missed Checkout";
+                              statusClass = "bg-amber-100 text-amber-700 font-bold";
+                            }
+                          } else {
+                            displayStatus = "Present";
+                            statusClass = "bg-green-100 text-green-700 font-bold";
+                          }
+                        } else if (item.status === "Absent") {
+                          statusClass = "bg-red-100 text-red-700 font-bold";
+                        } else {
+                          statusClass = "bg-yellow-100 text-yellow-700 font-bold";
+                        }
+                        return (
+                          <span className={`inline-block px-3 py-1 rounded-full text-xs uppercase tracking-wider ${statusClass}`}>
+                            {displayStatus}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="p-4">
                       <div className="flex gap-1">

@@ -287,7 +287,7 @@ function Shifts() {
         {/* TABLE */}
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
+              <table className="w-full border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 border-b">
                   <th className="text-left p-4 text-gray-600 font-semibold">Guard</th>

@@ -66,7 +66,7 @@ function GuardProfiles() {
           <div className="p-10 text-center text-gray-400">Loading...</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-white border-b border-gray-100">
                   <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Guard</th>

@@ -426,7 +426,7 @@ function Guards({ onGuardAdded }) {
             <h2 className="font-bold text-gray-800 text-lg">Guard Profiles ({guards.length})</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-sm min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 border-b">
                   {["Name", "Phone", "Email", "Site", "Location", "Status", "Actions"].map(h => (

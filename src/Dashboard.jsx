@@ -35,21 +35,15 @@ function Dashboard({ role }) {
 
         <div className="flex-1 p-4 md:p-8 overflow-y-auto">
           <div className="glass-card rounded-2xl p-6 mb-8 relative z-50">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+            <div className="flex justify-between items-center gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-800 capitalize">{page.replace("-", " ")}</h1>
-                <p className="text-gray-500 mt-1">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800 capitalize leading-tight">{page.replace("-", " ")}</h1>
+                <p className="text-sm md:text-base text-gray-500 mt-1">
                   Logged in as: <span className="font-medium capitalize text-blue-600">{role || "user"}</span>
                 </p>
               </div>
-              <div className="flex items-center gap-4 self-start md:self-auto">
+              <div className="flex items-center shrink-0">
                 <Notifications role={role} onNavigate={setPage} />
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-md"
-                >
-                  <span>🚪</span> Logout
-                </button>
               </div>
             </div>
           </div>

@@ -664,12 +664,35 @@ function GuardDuty({ guardId, guardName }) {
                 {loc && <p className="text-xs text-blue-600 mt-0.5">📍 {loc}</p>}
                 <p className="text-xs text-gray-400 mt-0.5">In: {fmt(item.check_in_time)} &nbsp;·&nbsp; Out: {fmt(item.check_out_time)}</p>
               </div>
-              <span className={`text-xs px-3 py-1 rounded-full font-bold shrink-0 ml-3 ${item.status === "Present" ? "bg-green-100 text-green-700" :
-                item.status === "Absent" ? "bg-red-100 text-red-700" :
-                  "bg-yellow-100 text-yellow-700"
-                }`}>
-                {item.status}
-              </span>
+              {(() => {
+                let displayStatus = item.status;
+                let statusClass = "bg-gray-100 text-gray-700";
+                if (item.status === "Present") {
+                  if (item.check_in_time && !item.check_out_time) {
+                    const checkInDate = new Date(item.check_in_time).toDateString();
+                    const todayDate = new Date().toDateString();
+                    if (checkInDate === todayDate) {
+                      displayStatus = "On Duty";
+                      statusClass = "bg-blue-100 text-blue-700";
+                    } else {
+                      displayStatus = "Missed Checkout";
+                      statusClass = "bg-amber-100 text-amber-700";
+                    }
+                  } else {
+                    displayStatus = "Present";
+                    statusClass = "bg-green-100 text-green-700";
+                  }
+                } else if (item.status === "Absent") {
+                  statusClass = "bg-red-100 text-red-700";
+                } else {
+                  statusClass = "bg-yellow-100 text-yellow-700";
+                }
+                return (
+                  <span className={`text-xs px-3 py-1 rounded-full font-bold shrink-0 ml-3 uppercase tracking-wider ${statusClass}`}>
+                    {displayStatus}
+                  </span>
+                );
+              })()}
             </div>
           );
         })}
@@ -810,7 +833,6 @@ function GuardDuty({ guardId, guardName }) {
                 </span>
               )}
               <Notifications role="guard" guardId={guardId} onNavigate={setActiveTab} />
-              <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Logout</button>
             </div>
           </div>
         </header>
@@ -911,15 +933,6 @@ function GuardDuty({ guardId, guardName }) {
             ))}
           </nav>
 
-          {/* Logout */}
-          <div className="px-5 py-5 border-t border-gray-100">
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-semibold text-sm transition"
-            >
-              🚪 Sign Out
-            </button>
-          </div>
         </aside>
 
         {/* Desktop MAIN CONTENT AREA */}

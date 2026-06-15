@@ -55,9 +55,21 @@ function Camera({ onCapture, onClose }) {
               <button onClick={confirm} className="px-5 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition">Use Photo</button>
             </>
           ) : (
-            <button onClick={capture} disabled={!ready} className={`px-6 py-2.5 rounded-lg text-white font-semibold transition ${ready ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-300 cursor-not-allowed"}`}>
-              📸 Capture
-            </button>
+            <>
+              <button 
+                onClick={() => { if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); onClose(); }}
+                className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={capture} 
+                disabled={!ready} 
+                className={`px-6 py-2.5 rounded-lg text-white font-semibold transition ${ready ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-300 cursor-not-allowed"}`}
+              >
+                📸 Capture
+              </button>
+            </>
           )}
         </div>
       </div>

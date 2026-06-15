@@ -25,6 +25,7 @@ function ChangeMapView({ coords }) {
 
 function DutyLocations() {
   const [locations, setLocations] = useState([]);
+  const [editingId, setEditingId] = useState(null);
   const [placeName, setPlaceName] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
@@ -44,7 +45,8 @@ function DutyLocations() {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+      // Use countrycodes=in to restrict to India natively without breaking the text search
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       setSearchResults(data || []);
       if (data && data.length > 0) {
@@ -89,25 +91,51 @@ function DutyLocations() {
     return Object.keys(errs).length === 0;
   }
 
-  async function addLocation() {
+  async function saveLocation() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const { error } = await supabase.from("duty_locations").insert([{
+      const payload = {
         place_name: placeName.trim(),
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
         radius_meters: parseInt(radius)
-      }]);
-      if (error) { showToast("Error saving location.", "error"); return; }
-      showToast("Duty location added!", "success");
-      setPlaceName(""); setLatitude(""); setLongitude(""); setRadius("100");
+      };
+
+      let error;
+      if (editingId) {
+        const { error: err } = await supabase.from("duty_locations").update(payload).eq("id", editingId);
+        error = err;
+      } else {
+        const { error: err } = await supabase.from("duty_locations").insert([payload]);
+        error = err;
+      }
+
+      if (error) { showToast(editingId ? "Error updating location." : "Error saving location.", "error"); return; }
+      showToast(editingId ? "Duty location updated!" : "Duty location added!", "success");
+      cancelEdit();
       fetchLocations();
     } catch {
       showToast("Network error.", "error");
     } finally {
       setLoading(false);
     }
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setPlaceName(""); setLatitude(""); setLongitude(""); setRadius("100");
+    setErrors({});
+  }
+
+  function handleEdit(loc) {
+    setEditingId(loc.id);
+    setPlaceName(loc.place_name);
+    setLatitude(loc.latitude.toString());
+    setLongitude(loc.longitude.toString());
+    setRadius(loc.radius_meters.toString());
+    setErrors({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function deleteLocation(id) {
@@ -216,7 +244,9 @@ function DutyLocations() {
       )}
       <div className="mt-4">
         <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-emerald-200">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700 font-bold">📍 Add Duty Location</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-700 font-bold">
+            {editingId ? "✏️ Edit Duty Location" : "📍 Add Duty Location"}
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-500 mb-1">Place Name</label>
@@ -252,10 +282,18 @@ function DutyLocations() {
               {errors.radius && <p className="text-red-500 text-sm mt-1">{errors.radius}</p>}
             </div>
           </div>
-          <button onClick={addLocation} disabled={loading}
-            className={`mt-5 px-6 py-3 rounded-lg text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-            {loading ? "Saving..." : "Add Location"}
-          </button>
+          <div className="flex gap-3 mt-5">
+            <button onClick={saveLocation} disabled={loading}
+              className={`px-6 py-3 rounded-lg text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+              {loading ? "Saving..." : editingId ? "Update Location" : "Add Location"}
+            </button>
+            {editingId && (
+              <button onClick={cancelEdit} disabled={loading}
+                className="px-6 py-3 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-semibold transition">
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="glass-card rounded-2xl overflow-hidden">
@@ -280,8 +318,12 @@ function DutyLocations() {
                     <td className="p-4 text-gray-500">{loc.longitude}</td>
                     <td className="p-4">{loc.radius_meters}m</td>
                     <td className="p-4">
-                      <button onClick={() => deleteLocation(loc.id)}
-                        className="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                      <div className="flex gap-3">
+                        <button onClick={() => handleEdit(loc)}
+                          className="text-blue-500 hover:text-blue-700 text-sm font-medium">Edit</button>
+                        <button onClick={() => deleteLocation(loc.id)}
+                          className="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import LoadingOverlay from "./LoadingOverlay";
 
-function Circulars({ role }) {
+function Circulars({ role, userGuardId }) {
   const [circulars, setCirculars] = useState([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -13,10 +13,20 @@ function Circulars({ role }) {
 
   async function fetchCirculars() {
     try {
-      const { data } = await supabase
+      let query = supabase
         .from("circulars")
         .select("*")
         .order("created_at", { ascending: false });
+
+      // Non-admin users only see broadcast circulars (guard_id is null)
+      // or circulars specifically targeted to them
+      if (role !== "admin" && userGuardId) {
+        query = query.or(`guard_id.is.null,guard_id.eq.${userGuardId}`);
+      } else if (role !== "admin" && !userGuardId) {
+        query = query.is("guard_id", null);
+      }
+
+      const { data } = await query;
       setCirculars(data || []);
     } catch {
       showToast("Could not load circulars.", "error");

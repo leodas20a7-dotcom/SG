@@ -99,6 +99,7 @@ function Shifts() {
       await supabase.from("circulars").insert([{
         title: `New Shift Assigned – ${guardName}`,
         content: `⏰ Shift: ${shiftName}\n🕐 Time: ${sTime} → ${eTime}\n📍 Site: ${guardSite}\n\nPlease report on time.`,
+        guard_id: guardId,
       }]);
 
       showToast("Shift assigned & guard notified!", "success");

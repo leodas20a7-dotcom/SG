@@ -237,7 +237,7 @@ function App() {
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Dashboard role={role} />
+      <Dashboard role={role} userGuardId={guardId} />
     </ErrorBoundary>
   );
 }

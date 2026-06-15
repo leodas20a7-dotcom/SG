@@ -129,7 +129,7 @@ const TABS = [
 ];
 
 /* ─── Circular feed (read-only) ─── */
-function CircularFeed() {
+function CircularFeed({ guardId }) {
   const [items, setItems] = useState([]);
   useEffect(() => {
     if (!navigator.onLine) {
@@ -137,7 +137,13 @@ function CircularFeed() {
       if (cached) setItems(cached);
       return;
     }
-    supabase.from("circulars").select("*").order("created_at", { ascending: false })
+    let query = supabase.from("circulars").select("*").order("created_at", { ascending: false });
+    if (guardId) {
+      query = query.or(`guard_id.is.null,guard_id.eq.${guardId}`);
+    } else {
+      query = query.is("guard_id", null);
+    }
+    query
       .then(({ data }) => {
         setItems(data || []);
         setCached("circulars", data || []);
@@ -146,7 +152,7 @@ function CircularFeed() {
         const cached = getCached("circulars");
         if (cached) setItems(cached);
       });
-  }, []);
+  }, [guardId]);
   return (
     <div className="space-y-3">
       {items.length === 0
@@ -1284,7 +1290,7 @@ function GuardDuty({ guardId, guardName }) {
           <h2 className="font-bold text-gray-800 text-lg">{t("official_announcements")}</h2>
           <p className="text-xs text-gray-400 mt-0.5">{t("circulars_desc")}</p>
         </div>
-        <CircularFeed />
+        <CircularFeed guardId={guardId} />
       </div>
     ),
   };

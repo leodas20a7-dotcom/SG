@@ -71,7 +71,7 @@ function LanguageDropdown({ locale, setLocale }) {
   );
 }
 
-function Dashboard({ role }) {
+function Dashboard({ role, userGuardId }) {
 
   const { t, locale, setLocale } = useLanguage();
   const [page, setPage] = useState("dashboard");
@@ -204,7 +204,7 @@ function Dashboard({ role }) {
           {page === "guard-profiles" && (role === "admin" || role === "supervisor") && <GuardProfiles />}
           {page === "system-users" && role === "admin" && <SystemAccess />}
           {page === "incidents" && <Incidents role={role} />}
-          {page === "circulars" && <Circulars role={role} />}
+          {page === "circulars" && <Circulars role={role} userGuardId={userGuardId} />}
           {page === "correction-requests" && <CorrectionRequests role={role} />}
         </div>
       </div>

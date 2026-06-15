@@ -773,6 +773,7 @@ function GuardDuty({ guardId, guardName }) {
         setLoading(false); return;
       }
       setStatus("✅ Location verified! Capture selfie to check in.", "success");
+      setLoading(false);
       setCameraMode("checkin"); setShowCamera(true);
     } catch (err) { setError(err.message); setLoading(false); setGpsStatus(null); }
   }
@@ -852,6 +853,7 @@ function GuardDuty({ guardId, guardName }) {
         if (dist > dutyLocation.radius_meters) { setStatus(`⚠️ You are ${dist}m away. Move within ${dutyLocation.radius_meters}m of ${dutyLocation.place_name}.`, "warn"); setLoading(false); return; }
       }
       setStatus("✅ Location ok! Capture selfie to check out.", "success");
+      setLoading(false);
       setCameraMode("checkout"); setShowCamera(true);
     } catch (err) { setError(err.message); setLoading(false); }
   }

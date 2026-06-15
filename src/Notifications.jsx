@@ -42,8 +42,8 @@ function Notifications({ role, guardId, onNavigate }) {
         .limit(20);
 
       if (currentRole === "guard" && guardId) {
-        // Guards only see notifications specifically for them (or general circulars where guard_id is null)
-        query = query.or(`guard_id.eq.${guardId},guard_id.is.null`);
+        // Guards only see notifications specifically for them
+        query = query.eq("guard_id", guardId);
       }
 
       const { data } = await query;
@@ -112,7 +112,7 @@ function Notifications({ role, guardId, onNavigate }) {
     if (!currentRole) return;
     let query = supabase.from("notifications").delete().eq("user_role", currentRole);
     if (currentRole === "guard" && guardId) {
-      query = query.or(`guard_id.eq.${guardId},guard_id.is.null`);
+      query = query.eq("guard_id", guardId);
     }
     await query;
   };

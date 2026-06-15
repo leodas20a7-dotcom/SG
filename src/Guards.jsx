@@ -14,8 +14,8 @@ const DEFAULT_TIMINGS = {
 };
 
 /* ── helper: post a circular notification ── */
-async function postCircular(title, content) {
-  await supabase.from("circulars").insert([{ title, content }]);
+async function postCircular(title, content, guardId = null, isBroadcast = false) {
+  await supabase.from("circulars").insert([{ title, content, guard_id: guardId, is_broadcast: isBroadcast }]);
 }
 
 function Guards({ onGuardAdded }) {
@@ -158,7 +158,8 @@ function Guards({ onGuardAdded }) {
         const locName = locations.find(l => String(l.id) === String(tempLocationId))?.place_name || "a temporary location";
         await postCircular(
           `Temporary Assignment Update – ${overrideGuard.name}`,
-          `Guard ${overrideGuard.name} has been assigned to ${locName} from ${tempFrom} to ${tempTo}.`
+          `Guard ${overrideGuard.name} has been assigned to ${locName} from ${tempFrom} to ${tempTo}.`,
+          guardId
         );
       }
 
@@ -326,7 +327,8 @@ function Guards({ onGuardAdded }) {
         const locName = locations.find(l => l.id === parseInt(tempLocationId))?.place_name || "another location";
         await postCircular(
           `Temporary Duty Assignment – ${name.trim()}`,
-          `Guard ${name.trim()} is temporarily assigned to ${locName} from ${tempFrom} to ${tempTo}.`
+          `Guard ${name.trim()} is temporarily assigned to ${locName} from ${tempFrom} to ${tempTo}.`,
+          guardId
         );
       }
 
@@ -497,7 +499,8 @@ function Guards({ onGuardAdded }) {
         const locName = locations.find(l => l.id === newLocId)?.place_name || "a new location";
         await postCircular(
           `Duty Location Update – ${name.trim()}`,
-          `Guard ${name.trim()}'s permanent duty location has been updated to: ${locName}.`
+          `Guard ${name.trim()}'s permanent duty location has been updated to: ${locName}.`,
+          editingId
         );
       }
 
@@ -511,7 +514,8 @@ function Guards({ onGuardAdded }) {
         const locName = locations.find(l => l.id === parseInt(tempLocationId))?.place_name || "a temporary location";
         await postCircular(
           `Temporary Location Update – ${name.trim()}`,
-          `Guard ${name.trim()} is temporarily assigned to ${locName}\nFrom: ${tempFrom}  →  To: ${tempTo}\nAttendance will be calculated at the temporary location during this period.`
+          `Guard ${name.trim()} is temporarily assigned to ${locName}\nFrom: ${tempFrom}  →  To: ${tempTo}\nAttendance will be calculated at the temporary location during this period.`,
+          editingId
         );
       }
 

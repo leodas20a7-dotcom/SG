@@ -149,6 +149,7 @@ function Shifts() {
       await supabase.from("circulars").insert([{
         title: "⏰ Shift Timings Updated",
         content: `The following shift timings have been updated effective immediately:\n\n${lines}\n\nPlease note the new timings for your upcoming shifts.`,
+        is_broadcast: true,
       }]);
 
       showToast("Shift timings saved & all guards notified!", "success");

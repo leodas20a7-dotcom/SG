@@ -87,18 +87,11 @@ function Guards({ onGuardAdded }) {
 
   function validateStep3() {
     const errs = {};
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errs.email = "Enter a valid email";
-    }
-    
     if (!editingId) {
       if (email.trim()) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Enter a valid email";
         if (!password) errs.password = "Password required";
         else if (password.length < 6) errs.password = "Min 6 characters";
-      }
-    } else {
-      if (password && password.length < 6) {
-        errs.password = "Min 6 characters";
       }
     }
     setErrors(errs);
@@ -116,19 +109,7 @@ function Guards({ onGuardAdded }) {
       }
     }
     if (!site.trim()) errs.site = "Site is required";
-    
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errs.email = "Enter a valid email";
-    }
-
-    if (!editingId) {
-      if (email.trim() && !password) errs.password = "Password required";
-      else if (password && password.length < 6) errs.password = "Min 6 characters";
-    } else {
-      if (password && password.length < 6) {
-        errs.password = "Min 6 characters";
-      }
-    }
+    if (!editingId && email.trim() && !password) errs.password = "Password required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -290,26 +271,17 @@ function Guards({ onGuardAdded }) {
     try {
       let authUserId = null;
       if (email.trim() && password) {
-        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_manage_user', {
-          p_action: 'create',
-          p_email: email.trim(),
-          p_password: password,
-          p_full_name: name.trim()
-        });
-
-        if (rpcErr) {
-          showToast(`Auth Database Error: ${rpcErr.message}`, "error");
-          setLoading(false);
-          return;
+        const { data: { session: saved } } = await supabase.auth.getSession();
+        const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (authErr) { showToast(`Auth Error: ${authErr.message}`, "error"); setLoading(false); return; }
+        if (saved) {
+          const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
+          if (sessionErr) showToast("Session issue, please re-login.", "error");
         }
-
-        if (rpcData && !rpcData.success) {
-          showToast(`Auth Error: ${rpcData.message}`, "error");
-          setLoading(false);
-          return;
+        authUserId = authData.user?.id;
+        if (authUserId) {
+          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
         }
-
-        authUserId = rpcData?.user_id;
       }
 
       const { data: insertData, error } = await supabase.from("guards").insert([{
@@ -454,52 +426,18 @@ function Guards({ onGuardAdded }) {
     try {
       const { data: currentGuard } = await supabase.from("guards").select("*").eq("id", editingId).single();
       let authUserId = currentGuard?.auth_user_id;
-      const emailChanged = email.trim().toLowerCase() !== (currentGuard?.email || "").toLowerCase();
 
-      if (email.trim()) {
-        if (!authUserId) {
-          if (password) {
-            const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_manage_user', {
-              p_action: 'create',
-              p_email: email.trim(),
-              p_password: password,
-              p_full_name: name.trim()
-            });
-
-            if (rpcErr) {
-              showToast(`Auth Database Error: ${rpcErr.message}`, "error");
-              setLoading(false);
-              return;
-            }
-
-            if (rpcData && !rpcData.success) {
-              showToast(`Auth Error: ${rpcData.message}`, "error");
-              setLoading(false);
-              return;
-            }
-
-            authUserId = rpcData?.user_id;
-          }
-        } else if (emailChanged || password) {
-          const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_manage_user', {
-            p_action: 'update',
-            p_user_id: authUserId,
-            p_email: emailChanged ? email.trim() : null,
-            p_password: password || null,
-            p_full_name: name.trim()
-          });
-
-          if (rpcErr) {
-            showToast(`Auth Database Error: ${rpcErr.message}`, "error");
-            setLoading(false);
-            return;
-          }
-
-          if (rpcData && !rpcData.success) {
-            showToast(`Auth Error: ${rpcData.message}`, "error");
-            setLoading(false);
-            return;
-          }
+      // Create auth account if credentials added for first time
+      if (email.trim() && !authUserId && password) {
+        const { data: { session: saved } } = await supabase.auth.getSession();
+        const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (!authErr && authData.user) {
+          authUserId = authData.user.id;
+          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
+        }
+        if (saved) {
+          const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
+          if (sessionErr) showToast("Session issue, please re-login.", "error");
         }
       }
 
@@ -628,12 +566,9 @@ function Guards({ onGuardAdded }) {
       const { error } = await supabase.from("guards").delete().eq("id", id);
       if (error) { showToast("Could not delete guard.", "error"); return; }
 
-      // Delete auth account and profile to revoke access
+      // Delete profile to revoke access
       if (guardData?.auth_user_id) {
-        await supabase.rpc('admin_manage_user', {
-          p_action: 'delete',
-          p_user_id: guardData.auth_user_id
-        });
+        await supabase.from("profiles").delete().eq("id", guardData.auth_user_id);
       }
 
       showToast("Guard and related data deleted.", "success");

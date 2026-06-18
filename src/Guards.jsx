@@ -97,14 +97,8 @@ function Guards({ onGuardAdded }) {
         else if (password.length < 6) errs.password = "Min 6 characters";
       }
     } else {
-      const originalGuard = guards.find(g => g.id === editingId);
-      const originalEmail = originalGuard?.email || originalGuard?.profiles?.email || "";
-      if (email.trim().toLowerCase() !== originalEmail.toLowerCase()) {
-        if (!password) {
-          errs.password = "Password is required to set new login credentials for the updated email";
-        } else if (password.length < 6) {
-          errs.password = "Min 6 characters";
-        }
+      if (password && password.length < 6) {
+        errs.password = "Min 6 characters";
       }
     }
     setErrors(errs);
@@ -129,15 +123,10 @@ function Guards({ onGuardAdded }) {
 
     if (!editingId) {
       if (email.trim() && !password) errs.password = "Password required";
+      else if (password && password.length < 6) errs.password = "Min 6 characters";
     } else {
-      const originalGuard = guards.find(g => g.id === editingId);
-      const originalEmail = originalGuard?.email || originalGuard?.profiles?.email || "";
-      if (email.trim().toLowerCase() !== originalEmail.toLowerCase()) {
-        if (!password) {
-          errs.password = "Password is required to set new login credentials for the updated email";
-        } else if (password.length < 6) {
-          errs.password = "Min 6 characters";
-        }
+      if (password && password.length < 6) {
+        errs.password = "Min 6 characters";
       }
     }
     setErrors(errs);
@@ -301,17 +290,26 @@ function Guards({ onGuardAdded }) {
     try {
       let authUserId = null;
       if (email.trim() && password) {
-        const { data: { session: saved } } = await supabase.auth.getSession();
-        const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
-        if (authErr) { showToast(`Auth Error: ${authErr.message}`, "error"); setLoading(false); return; }
-        if (saved) {
-          const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
-          if (sessionErr) showToast("Session issue, please re-login.", "error");
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_manage_user', {
+          p_action: 'create',
+          p_email: email.trim(),
+          p_password: password,
+          p_full_name: name.trim()
+        });
+
+        if (rpcErr) {
+          showToast(`Auth Database Error: ${rpcErr.message}`, "error");
+          setLoading(false);
+          return;
         }
-        authUserId = authData.user?.id;
-        if (authUserId) {
-          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
+
+        if (rpcData && !rpcData.success) {
+          showToast(`Auth Error: ${rpcData.message}`, "error");
+          setLoading(false);
+          return;
         }
+
+        authUserId = rpcData?.user_id;
       }
 
       const { data: insertData, error } = await supabase.from("guards").insert([{
@@ -458,31 +456,50 @@ function Guards({ onGuardAdded }) {
       let authUserId = currentGuard?.auth_user_id;
       const emailChanged = email.trim().toLowerCase() !== (currentGuard?.email || "").toLowerCase();
 
-      // Create auth account if credentials added for first time OR email changed
-      if (email.trim() && (!authUserId || emailChanged) && password) {
-        const { data: { session: saved } } = await supabase.auth.getSession();
-        const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
-        
-        if (!authErr && authData.user) {
-          const newAuthUserId = authData.user.id;
-          // Create new profile record
-          await supabase.from("profiles").insert([{ id: newAuthUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
-          
-          // Delete old profile if it exists
-          if (authUserId) {
-            await supabase.from("profiles").delete().eq("id", authUserId);
-          }
-          authUserId = newAuthUserId;
-        } else if (authErr) {
-          showToast(`Auth Error: ${authErr.message}`, "error");
-          setLoading(false);
-          return;
-        }
+      if (email.trim()) {
+        if (!authUserId) {
+          if (password) {
+            const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_manage_user', {
+              p_action: 'create',
+              p_email: email.trim(),
+              p_password: password,
+              p_full_name: name.trim()
+            });
 
-        // Restore original admin session
-        if (saved) {
-          const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
-          if (sessionErr) showToast("Session issue, please re-login.", "error");
+            if (rpcErr) {
+              showToast(`Auth Database Error: ${rpcErr.message}`, "error");
+              setLoading(false);
+              return;
+            }
+
+            if (rpcData && !rpcData.success) {
+              showToast(`Auth Error: ${rpcData.message}`, "error");
+              setLoading(false);
+              return;
+            }
+
+            authUserId = rpcData?.user_id;
+          }
+        } else if (emailChanged || password) {
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_manage_user', {
+            p_action: 'update',
+            p_user_id: authUserId,
+            p_email: emailChanged ? email.trim() : null,
+            p_password: password || null,
+            p_full_name: name.trim()
+          });
+
+          if (rpcErr) {
+            showToast(`Auth Database Error: ${rpcErr.message}`, "error");
+            setLoading(false);
+            return;
+          }
+
+          if (rpcData && !rpcData.success) {
+            showToast(`Auth Error: ${rpcData.message}`, "error");
+            setLoading(false);
+            return;
+          }
         }
       }
 
@@ -611,9 +628,12 @@ function Guards({ onGuardAdded }) {
       const { error } = await supabase.from("guards").delete().eq("id", id);
       if (error) { showToast("Could not delete guard.", "error"); return; }
 
-      // Delete profile to revoke access
+      // Delete auth account and profile to revoke access
       if (guardData?.auth_user_id) {
-        await supabase.from("profiles").delete().eq("id", guardData.auth_user_id);
+        await supabase.rpc('admin_manage_user', {
+          p_action: 'delete',
+          p_user_id: guardData.auth_user_id
+        });
       }
 
       showToast("Guard and related data deleted.", "success");

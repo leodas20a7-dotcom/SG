@@ -426,15 +426,30 @@ function Guards({ onGuardAdded }) {
     try {
       const { data: currentGuard } = await supabase.from("guards").select("*").eq("id", editingId).single();
       let authUserId = currentGuard?.auth_user_id;
+      const emailChanged = email.trim().toLowerCase() !== (currentGuard?.email || "").toLowerCase();
 
-      // Create auth account if credentials added for first time
-      if (email.trim() && !authUserId && password) {
+      // Create auth account if credentials added for first time OR email changed
+      if (email.trim() && (!authUserId || emailChanged) && password) {
         const { data: { session: saved } } = await supabase.auth.getSession();
         const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
+        
         if (!authErr && authData.user) {
-          authUserId = authData.user.id;
-          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
+          const newAuthUserId = authData.user.id;
+          // Create new profile record
+          await supabase.from("profiles").insert([{ id: newAuthUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
+          
+          // Delete old profile if it exists
+          if (authUserId) {
+            await supabase.from("profiles").delete().eq("id", authUserId);
+          }
+          authUserId = newAuthUserId;
+        } else if (authErr) {
+          showToast(`Auth Error: ${authErr.message}`, "error");
+          setLoading(false);
+          return;
         }
+
+        // Restore original admin session
         if (saved) {
           const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
           if (sessionErr) showToast("Session issue, please re-login.", "error");

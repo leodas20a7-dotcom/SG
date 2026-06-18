@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Circle, Polygon, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { getLocation } from "./lib/geoUtils";
 import LoadingOverlay from "./LoadingOverlay";
+import { getGeofencePolygonPoints } from "./MapView";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -288,7 +289,20 @@ function DutyLocations() {
                 <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
                 <MapClickHandler />
                 <ChangeMapView coords={[parseFloat(mapLat) || -33.8688, parseFloat(mapLng) || 151.2093]} />
-                {mapLat && mapLng && <Marker position={[parseFloat(mapLat), parseFloat(mapLng)]} />}
+                {mapLat && mapLng && (
+                  <>
+                    <Marker position={[parseFloat(mapLat), parseFloat(mapLng)]} />
+                    <Circle
+                      center={[parseFloat(mapLat), parseFloat(mapLng)]}
+                      radius={parseInt(radius) || 100}
+                      pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.08, weight: 1 }}
+                    />
+                    <Polygon
+                      positions={getGeofencePolygonPoints(parseFloat(mapLat), parseFloat(mapLng), parseInt(radius) || 100)}
+                      pathOptions={{ color: '#6366f1', fillColor: 'transparent', dashArray: '8, 6', weight: 2 }}
+                    />
+                  </>
+                )}
               </MapContainer>
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-t bg-gray-50">

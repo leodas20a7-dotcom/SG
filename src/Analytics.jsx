@@ -2,9 +2,10 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import { Bar, Pie } from "react-chartjs-2";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, Polygon, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { getGeofencePolygonPoints } from "./MapView";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -220,6 +221,14 @@ function Analytics({ role }) {
 
       if (error) throw error;
 
+      // Fetch guard's location details
+      const { data: guardData } = await supabase
+        .from("guards")
+        .select("*, duty_locations(latitude, longitude, radius_meters, place_name)")
+        .eq("id", selectedPatrolGuard)
+        .maybeSingle();
+      setSelectedGuardLocation(guardData?.duty_locations || null);
+
       if (data && data.length > 0) {
         const coords = data.map(item => ({
           lat: item.latitude,
@@ -231,7 +240,7 @@ function Analytics({ role }) {
         setMapCenter([coords[0].lat, coords[0].lng]);
       } else {
         setPatrolCoords([]);
-        setMapCenter(null);
+        setMapCenter(guardData?.duty_locations ? [guardData.duty_locations.latitude, guardData.duty_locations.longitude] : null);
         showToast("No patrol route records for this guard on this day.", "info");
       }
     } catch (err) {
@@ -652,6 +661,20 @@ function Analytics({ role }) {
                     <ChangeMapView coords={mapCenter} />
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     
+                    {selectedGuardLocation && (
+                       <>
+                         <Circle
+                           center={[selectedGuardLocation.latitude, selectedGuardLocation.longitude]}
+                           radius={selectedGuardLocation.radius_meters || 100}
+                           pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.05, weight: 1 }}
+                         />
+                         <Polygon
+                           positions={getGeofencePolygonPoints(selectedGuardLocation.latitude, selectedGuardLocation.longitude, selectedGuardLocation.radius_meters || 100)}
+                           pathOptions={{ color: '#6366f1', fillColor: 'transparent', dashArray: '8, 6', weight: 2 }}
+                         />
+                       </>
+                     )}
+
                     {/* Draw route lines */}
                     {patrolCoords.length > 1 && (
                       <Polyline

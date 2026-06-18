@@ -87,11 +87,24 @@ function Guards({ onGuardAdded }) {
 
   function validateStep3() {
     const errs = {};
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errs.email = "Enter a valid email";
+    }
+    
     if (!editingId) {
       if (email.trim()) {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Enter a valid email";
         if (!password) errs.password = "Password required";
         else if (password.length < 6) errs.password = "Min 6 characters";
+      }
+    } else {
+      const originalGuard = guards.find(g => g.id === editingId);
+      const originalEmail = originalGuard?.email || originalGuard?.profiles?.email || "";
+      if (email.trim().toLowerCase() !== originalEmail.toLowerCase()) {
+        if (!password) {
+          errs.password = "Password is required to set new login credentials for the updated email";
+        } else if (password.length < 6) {
+          errs.password = "Min 6 characters";
+        }
       }
     }
     setErrors(errs);
@@ -109,7 +122,24 @@ function Guards({ onGuardAdded }) {
       }
     }
     if (!site.trim()) errs.site = "Site is required";
-    if (!editingId && email.trim() && !password) errs.password = "Password required";
+    
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errs.email = "Enter a valid email";
+    }
+
+    if (!editingId) {
+      if (email.trim() && !password) errs.password = "Password required";
+    } else {
+      const originalGuard = guards.find(g => g.id === editingId);
+      const originalEmail = originalGuard?.email || originalGuard?.profiles?.email || "";
+      if (email.trim().toLowerCase() !== originalEmail.toLowerCase()) {
+        if (!password) {
+          errs.password = "Password is required to set new login credentials for the updated email";
+        } else if (password.length < 6) {
+          errs.password = "Min 6 characters";
+        }
+      }
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }

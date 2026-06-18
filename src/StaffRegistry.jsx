@@ -7,22 +7,30 @@ function StaffRegistry() {
 
   return (
     <div className="mt-8">
-      <div className="flex border-b border-gray-200 mb-6 bg-white p-2 rounded-xl shadow-sm gap-2 overflow-x-auto">
+      <div className="flex mb-6 bg-slate-100 p-1 rounded-2xl shadow-inner gap-1 max-w-md md:max-w-none">
         <button
           onClick={() => setActiveTab("guards")}
-          className={`flex-1 md:flex-initial px-5 py-3 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
-            activeTab === "guards" ? "bg-indigo-600 text-white shadow-md" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+          className={`flex-1 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all duration-300 whitespace-nowrap flex items-center justify-center gap-1.5 ${
+            activeTab === "guards" 
+              ? "bg-indigo-600 text-white shadow-md" 
+              : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
           }`}
         >
-          👮 Guard Profiles & Login
+          <span>👮</span>
+          <span className="hidden sm:inline">Guard Profiles & Login</span>
+          <span className="sm:hidden">Profiles</span>
         </button>
         <button
           onClick={() => setActiveTab("locations")}
-          className={`flex-1 md:flex-initial px-5 py-3 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
-            activeTab === "locations" ? "bg-indigo-600 text-white shadow-md" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+          className={`flex-1 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all duration-300 whitespace-nowrap flex items-center justify-center gap-1.5 ${
+            activeTab === "locations" 
+              ? "bg-indigo-600 text-white shadow-md" 
+              : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
           }`}
         >
-          📍 Duty Locations
+          <span>📍</span>
+          <span className="hidden sm:inline">Duty Locations</span>
+          <span className="sm:hidden">Locations</span>
         </button>
       </div>
 

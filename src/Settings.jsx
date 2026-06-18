@@ -4,7 +4,7 @@ import { useToast } from "./Toast";
 import LoadingOverlay from "./LoadingOverlay";
 import ConfirmModal from "./ConfirmModal";
 
-function Settings() {
+function Settings({ onStartTour }) {
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -204,6 +204,23 @@ function Settings() {
                 className="w-full h-11 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition mt-2 shadow-sm"
               >
                 Reset System Database
+              </button>
+            </div>
+
+            {/* Guided Tour Card */}
+            <div className="bg-white/80 rounded-2xl p-5 border border-indigo-200 flex flex-col justify-between shadow-sm md:col-span-2">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-605 flex items-center justify-center text-2xl mb-4">📖</div>
+                <h3 className="font-bold text-gray-800 text-lg mb-1">Help & Audio Guided Tour</h3>
+                <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+                  Start an automated guided tour that switches between each module and uses text-to-speech voiceover (in English) to explain all functions, buttons, and settings.
+                </p>
+              </div>
+              <button
+                onClick={onStartTour}
+                className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition mt-2 shadow-sm"
+              >
+                Start Help Tour
               </button>
             </div>
           </div>

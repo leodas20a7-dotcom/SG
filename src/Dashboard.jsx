@@ -85,6 +85,78 @@ function Dashboard({ role, userGuardId }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sosAlert, setSosAlert] = useState(null);
   const { showToast, ToastContainer } = useToast();
+  const [tourStep, setTourStep] = useState(null);
+  const [tourMuted, setTourMuted] = useState(false);
+
+  const tourSteps = [
+    {
+      title: "Welcome to SecureSys",
+      page: "dashboard",
+      text: "Welcome to the SecureSys Admin Dashboard. This is your central command center where you can manage security operations."
+    },
+    {
+      title: "Real-time Analytics",
+      page: "dashboard",
+      text: "Here, the dashboard shows you visual metrics of active guards, present staff, leaves, and outstanding incident alerts."
+    },
+    {
+      title: "Navigation Sidebar",
+      page: "dashboard",
+      text: "Use this navigation sidebar to jump between tracking, staff management, rosters, incidents, and circulars."
+    },
+    {
+      title: "Live Operations & Tracking",
+      page: "live-ops",
+      text: "Under Live Operations, you can monitor active guards in the field. Live GPS coordinates are uploaded automatically and displayed on the interactive map."
+    },
+    {
+      title: "Staff Registry & Locations",
+      page: "staff-registry",
+      text: "In the Staff Registry, you manage guard profiles, create logins, and define geofenced duty locations with strict radius limits."
+    },
+    {
+      title: "Incident Reports",
+      page: "incidents",
+      text: "The Incidents panel collects field logs from guards, complete with photo evidence, description, and recorded audio reports."
+    },
+    {
+      title: "Broadcast Announcements",
+      page: "circulars",
+      text: "Under Circulars, you can write messages that pop up immediately on every active guard's mobile screen."
+    },
+    {
+      title: "System Settings",
+      page: "settings",
+      text: "Finally, in Settings, you can clear temporary storage photos, delete voice notes, or reset the system database while keeping your admin credentials secure."
+    }
+  ];
+
+  useEffect(() => {
+    if (tourStep === null || !tourSteps[tourStep]) {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      return;
+    }
+
+    const currentStep = tourSteps[tourStep];
+    
+    // Auto navigation to matching page
+    if (page !== currentStep.page) {
+      setPage(currentStep.page);
+    }
+
+    // Speech Synthesis
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      if (!tourMuted) {
+        // Wait briefly for page to transition before speaking
+        setTimeout(() => {
+          const utterance = new SpeechSynthesisUtterance(currentStep.text);
+          utterance.lang = "en-US";
+          window.speechSynthesis.speak(utterance);
+        }, 150);
+      }
+    }
+  }, [tourStep, tourMuted]);
 
   useEffect(() => {
     if (!role) return;
@@ -213,7 +285,7 @@ function Dashboard({ role, userGuardId }) {
           {page === "incidents" && <Incidents role={role} />}
           {page === "circulars" && <Circulars role={role} userGuardId={userGuardId} />}
           {page === "correction-requests" && <CorrectionRequests role={role} />}
-          {page === "settings" && role === "admin" && <Settings />}
+          {page === "settings" && role === "admin" && <Settings onStartTour={() => setTourStep(0)} />}
         </div>
       </div>
 
@@ -240,6 +312,74 @@ function Dashboard({ role, userGuardId }) {
               onClick={acknowledgeSos}
               className="w-full py-3.5 bg-red-600 hover:bg-red-750 text-white font-bold rounded-xl transition text-sm shadow-lg shadow-red-200"
             >
+              {t("acknowledge_alert")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tourStep !== null && tourSteps[tourStep] && (
+        <div className="fixed bottom-6 right-6 z-[100001] max-w-sm w-full bg-slate-900 text-white p-5 rounded-2xl shadow-2xl border border-indigo-500 animate-fade-in">
+          <div className="flex justify-between items-center mb-2.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-full">
+              System Tour — Step {tourStep + 1} of {tourSteps.length}
+            </span>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setTourMuted(!tourMuted)} 
+                className="text-xs text-slate-400 hover:text-white transition"
+                title={tourMuted ? "Unmute Tour" : "Mute Tour"}
+              >
+                {tourMuted ? "🔇" : "🔊"}
+              </button>
+              <button 
+                onClick={() => setTourStep(null)} 
+                className="text-xs text-slate-400 hover:text-white transition font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <h4 className="font-bold text-base mb-1">{tourSteps[tourStep].title}</h4>
+          <p className="text-xs text-slate-300 leading-relaxed mb-4">{tourSteps[tourStep].text}</p>
+          <div className="flex justify-between gap-2">
+            <button 
+              disabled={tourStep === 0} 
+              onClick={() => setTourStep(p => Math.max(p - 1, 0))}
+              className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold hover:bg-slate-800 disabled:opacity-40"
+            >
+              ◀ Prev
+            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setTourStep(null)} 
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Skip Tour
+              </button>
+              {tourStep < tourSteps.length - 1 ? (
+                <button 
+                  onClick={() => setTourStep(p => p + 1)}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition"
+                >
+                  Next ▶
+                </button>
+              ) : (
+                <button 
+                  onClick={() => {
+                    setTourStep(null);
+                    showToast("Tour completed! You are ready to go.", "success");
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition"
+                >
+                  Finish 🎉
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>         >
               {t("acknowledge_alert")}
             </button>
           </div>

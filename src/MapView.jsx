@@ -104,8 +104,8 @@ function MapView() {
   }));
 
   const pins = [...allLocations, ...allGuards];
-  const centerLat = pins.length > 0 ? pins[0].lat : 13.0827;
-  const centerLng = pins.length > 0 ? pins[0].lng : 80.2707;
+  const centerLat = pins.length > 0 ? pins[0].lat : -33.8688;
+  const centerLng = pins.length > 0 ? pins[0].lng : 151.2093;
 
   return (
     <>

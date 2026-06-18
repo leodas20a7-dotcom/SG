@@ -28,35 +28,8 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
   };
 
   // Helper to check if a notification is allowed for the logged in guard
+  // Removed name-based filtering; database queries and realtime listener handle guard_id filtering.
   const isAllowed = (notif) => {
-    if (role?.toLowerCase() === "guard" && guardName) {
-      const pattern = /(?:Update|Assignment|Assigned|Update)\s*[\u2013-]\s*([^\n\r]+)/i;
-      
-      const titleMatch = notif.title?.match(pattern);
-      if (titleMatch) {
-        const nameInTitle = titleMatch[1].trim();
-        if (nameInTitle.toLowerCase() !== guardName.toLowerCase()) {
-          return false;
-        }
-      }
-
-      const msgMatch = notif.message?.match(pattern);
-      if (msgMatch) {
-        const nameInMsg = msgMatch[1].trim();
-        if (nameInMsg.toLowerCase() !== guardName.toLowerCase()) {
-          return false;
-        }
-      }
-
-      const guardPattern = /Guard\s+([A-Za-z]+)/i;
-      const guardMatch = notif.message?.match(guardPattern);
-      if (guardMatch) {
-        const nameInGuardMsg = guardMatch[1].trim();
-        if (nameInGuardMsg.toLowerCase() !== guardName.toLowerCase()) {
-          return false;
-        }
-      }
-    }
     return true;
   };
 

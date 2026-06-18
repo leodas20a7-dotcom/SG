@@ -13,6 +13,7 @@ import Charts from "./Charts";
 import { useToast } from "./Toast";
 import Notifications from "./Notifications";
 import { useLanguage } from "./LanguageContext";
+import Settings from "./Settings";
 
 /* ─── Language Dropdown ───────────────────────────── */
 function LanguageDropdown({ locale, setLocale }) {
@@ -21,10 +22,16 @@ function LanguageDropdown({ locale, setLocale }) {
 
   const languages = [
     { code: "en", label: "English" },
+    { code: "zh", label: "中文" },
+    { code: "ar", label: "العربية" },
+    { code: "vi", label: "Tiếng Việt" },
+    { code: "pa", label: "ਪੰਜਾਬੀ" },
     { code: "hi", label: "हिंदी" },
+    { code: "el", label: "Ελληνικά" },
+    { code: "it", label: "Italiano" },
+    { code: "tl", label: "Tagalog" },
+    { code: "es", label: "Español" },
     { code: "ta", label: "தமிழ்" },
-    { code: "te", label: "తెలుగు" },
-    { code: "kn", label: "ಕನ್ನಡ" },
   ];
 
   useEffect(() => {
@@ -48,7 +55,7 @@ function LanguageDropdown({ locale, setLocale }) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-36 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden z-50 py-1 origin-top-right">
+        <div className="absolute top-full right-0 mt-2 w-36 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-y-auto max-h-48 z-50 py-1 origin-top-right">
           {languages.map((lang) => (
             <button
               key={lang.code}
@@ -77,19 +84,7 @@ function Dashboard({ role, userGuardId }) {
   const [page, setPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sosAlert, setSosAlert] = useState(null);
-  const [showDevInfo, setShowDevInfo] = useState(false);
   const { showToast, ToastContainer } = useToast();
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.shiftKey && (e.key === '7' || e.code === 'Digit7' || e.keyCode === 55)) {
-        e.preventDefault();
-        setShowDevInfo(true);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   useEffect(() => {
     if (!role) return;
@@ -207,8 +202,8 @@ function Dashboard({ role, userGuardId }) {
 
           {page === "dashboard" && (
             <>
-              <Analytics />
-              <Charts />
+              <Analytics role={role} />
+              {role !== "admin" && <Charts />}
             </>
           )}
           {page === "live-ops" && <LiveOps role={role} />}
@@ -218,6 +213,7 @@ function Dashboard({ role, userGuardId }) {
           {page === "incidents" && <Incidents role={role} />}
           {page === "circulars" && <Circulars role={role} userGuardId={userGuardId} />}
           {page === "correction-requests" && <CorrectionRequests role={role} />}
+          {page === "settings" && role === "admin" && <Settings />}
         </div>
       </div>
 
@@ -246,63 +242,6 @@ function Dashboard({ role, userGuardId }) {
             >
               {t("acknowledge_alert")}
             </button>
-          </div>
-        </div>
-      )}
-
-      {showDevInfo && (
-        <div 
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-4 transition-opacity duration-300"
-          onClick={() => setShowDevInfo(false)}
-        >
-          <style>{`
-            @keyframes devModalScale {
-              from { transform: scale(0.9); opacity: 0; }
-              to { transform: scale(1); opacity: 1; }
-            }
-            .animate-dev-modal {
-              animation: devModalScale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-            }
-          `}</style>
-          <div 
-            className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white p-8 rounded-3xl max-w-sm w-full shadow-2xl shadow-indigo-500/10 text-center relative overflow-hidden animate-dev-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Ambient background glows */}
-            <div className="absolute -top-16 -left-16 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-16 -right-16 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Close Button */}
-            <button 
-              onClick={() => setShowDevInfo(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors text-lg"
-            >
-              ✕
-            </button>
-
-            {/* Icon/Logo */}
-            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-3xl shadow-inner animate-pulse">
-              💻
-            </div>
-
-            {/* Developer Details */}
-            <h3 className="font-extrabold text-2xl bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-tight">
-              Developed by Sakthivel
-            </h3>
-            <p className="text-indigo-200 text-sm font-semibold mt-1">
-              Full stack Developer
-            </p>
-            <p className="text-slate-400 text-xs mt-3">
-              Founder of Codearcade
-            </p>
-            <a 
-              href="https://codearcade20.vercel.app" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="inline-block mt-4 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors underline decoration-dotted tracking-wide"
-            >
-              codearcade20.vercel.app
-            </a>
           </div>
         </div>
       )}

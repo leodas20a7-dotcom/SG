@@ -13,7 +13,7 @@ function Toast({ message, type = "success", onClose }) {
   };
 
   return (
-    <div className="fixed top-5 right-5 z-50 animate-fade-in">
+    <div className="fixed top-5 right-5 z-[99999] animate-fade-in">
       <div className={`${colors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 min-w-[280px]`}>
         <span className="text-lg">
           {type === "success" && "✓"}

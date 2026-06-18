@@ -41,13 +41,70 @@ function DutyLocations() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [locLoading, setLocLoading] = useState(false);
+
+  function parseCoordinates(input) {
+    if (!input) return null;
+    const trimmed = input.trim();
+    
+    // Pattern 1: Google Maps URL containing q=lat,lng
+    const qPattern = /[?&]q=([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)/;
+    const qMatch = trimmed.match(qPattern);
+    if (qMatch) {
+      return { lat: parseFloat(qMatch[1]).toFixed(6), lng: parseFloat(qMatch[2]).toFixed(6) };
+    }
+    
+    // Pattern 2: Google Maps URL containing @lat,lng
+    const atPattern = /@([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)/;
+    const atMatch = trimmed.match(atPattern);
+    if (atMatch) {
+      return { lat: parseFloat(atMatch[1]).toFixed(6), lng: parseFloat(atMatch[2]).toFixed(6) };
+    }
+
+    // Pattern 3: Direct coordinates like "13.0705979, 80.2034464"
+    const coordPattern = /^([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)$/;
+    const coordMatch = trimmed.match(coordPattern);
+    if (coordMatch) {
+      return { lat: parseFloat(coordMatch[1]).toFixed(6), lng: parseFloat(coordMatch[2]).toFixed(6) };
+    }
+
+    return null;
+  }
+
+  function handleLocationInput(val, isLat) {
+    const parsed = parseCoordinates(val);
+    if (parsed) {
+      setLatitude(parsed.lat);
+      setLongitude(parsed.lng);
+      showToast(`Parsed coordinates: ${parsed.lat}, ${parsed.lng}`, "success");
+    } else {
+      if (isLat) {
+        setLatitude(val);
+      } else {
+        setLongitude(val);
+      }
+    }
+    setErrors((p) => ({ ...p, latitude: "", longitude: "" }));
+  }
 
   async function handleSearchLocation() {
     if (!searchQuery.trim()) return;
+
+    const parsed = parseCoordinates(searchQuery);
+    if (parsed) {
+      setMapLat(parsed.lat);
+      setMapLng(parsed.lng);
+      setLatitude(parsed.lat);
+      setLongitude(parsed.lng);
+      showToast(`Parsed coordinates: ${parsed.lat}, ${parsed.lng}`, "success");
+      setSearchResults([]);
+      return;
+    }
+
     setSearching(true);
     try {
-      // Use countrycodes=in to restrict to India natively without breaking the text search
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(searchQuery)}`);
+      // Use countrycodes=au to restrict to Australia natively without breaking the text search
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=au&q=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       setSearchResults(data || []);
       if (data && data.length > 0) {
@@ -150,6 +207,7 @@ function DutyLocations() {
   }
 
   async function getCurrentLocation() {
+    setLocLoading(true);
     try {
       const pos = await getLocation();
       setLatitude(pos.lat.toFixed(6));
@@ -157,6 +215,8 @@ function DutyLocations() {
       showToast("High-accuracy location acquired", "success");
     } catch (err) {
       showToast(err.message, "error");
+    } finally {
+      setLocLoading(false);
     }
   }
 
@@ -188,7 +248,7 @@ function DutyLocations() {
             <div className="p-3 bg-gray-50 border-b border-gray-100 flex gap-2">
               <input
                 type="text"
-                placeholder="Search place name (e.g. Koyambedu, Chennai)..."
+                placeholder="Search place name (e.g. Melbourne, Sydney)..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSearchLocation()}
@@ -224,10 +284,10 @@ function DutyLocations() {
             )}
 
             <div style={{ height: "400px" }}>
-              <MapContainer center={[parseFloat(mapLat) || 13.0827, parseFloat(mapLng) || 80.2707]} zoom={15} className="w-full h-full">
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <MapContainer center={[parseFloat(mapLat) || -33.8688, parseFloat(mapLng) || 151.2093]} zoom={15} className="w-full h-full">
+                <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
                 <MapClickHandler />
-                <ChangeMapView coords={[parseFloat(mapLat) || 13.0827, parseFloat(mapLng) || 80.2707]} />
+                <ChangeMapView coords={[parseFloat(mapLat) || -33.8688, parseFloat(mapLng) || 151.2093]} />
                 {mapLat && mapLng && <Marker position={[parseFloat(mapLat), parseFloat(mapLng)]} />}
               </MapContainer>
             </div>
@@ -260,21 +320,36 @@ function DutyLocations() {
             <div>
               <label className="block text-sm text-gray-500 mb-1">Latitude</label>
               <div className="flex gap-2">
-                <input type="number" step="any" placeholder="13.0827" value={latitude}
-                  onChange={(e) => { setLatitude(e.target.value); setErrors((p) => ({ ...p, latitude: "" })); }}
+                <input type="text" placeholder="-33.8688" value={latitude}
+                  onChange={(e) => handleLocationInput(e.target.value, true)}
                   className={`flex-1 w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.latitude ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-emerald-300"}`} />
-                <button onClick={getCurrentLocation} className="h-12 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm whitespace-nowrap">📍 Use My</button>
+                <button onClick={() => { setMapLat(latitude || "-33.8688"); setMapLng(longitude || "151.2093"); setShowMap(true); }} className="h-12 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm whitespace-nowrap">🗺️ Pick on Map</button>
               </div>
               {errors.latitude && <p className="text-red-500 text-sm mt-1">{errors.latitude}</p>}
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Longitude</label>
-              <input type="number" step="any" placeholder="80.2707" value={longitude}
-                onChange={(e) => { setLongitude(e.target.value); setErrors((p) => ({ ...p, longitude: "" })); }}
+              <input type="text" placeholder="80.2707" value={longitude}
+                onChange={(e) => handleLocationInput(e.target.value, false)}
                 className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.longitude ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-emerald-300"}`} />
               {errors.longitude && <p className="text-red-500 text-sm mt-1">{errors.longitude}</p>}
-              <button onClick={() => { setMapLat(latitude || "13.0827"); setMapLng(longitude || "80.2707"); setShowMap(true); }}
-                className="mt-2 text-sm text-blue-600 hover:text-blue-700 hover:underline">🗺️ Pick on Map</button>
+              <button 
+                onClick={getCurrentLocation}
+                disabled={locLoading}
+                className="mt-2 text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {locLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Getting Location...</span>
+                  </>
+                ) : (
+                  <>📍 Use My Location</>
+                )}
+              </button>
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Radius (meters)</label>

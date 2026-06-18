@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
+import CustomSelect from "./CustomSelect";
 
 const SHIFT_OPTIONS = ["Morning Shift", "Evening Shift", "Night Shift", "Full Day"];
 
@@ -96,11 +97,13 @@ function Shifts() {
       const guardName = selectedGuard?.name || "Guard";
       const sTime = startTime || shiftTimings[shiftName]?.start || "—";
       const eTime = endTime   || shiftTimings[shiftName]?.end   || "—";
-      await supabase.from("circulars").insert([{
+      await supabase.from("notifications").insert([{
         title: `New Shift Assigned – ${guardName}`,
-        content: `⏰ Shift: ${shiftName}\n🕐 Time: ${sTime} → ${eTime}\n📍 Site: ${guardSite}\n\nPlease report on time.`,
+        message: `⏰ Shift: ${shiftName}\n🕐 Time: ${sTime} → ${eTime}\n📍 Site: ${guardSite}\n\nPlease report on time.`,
         guard_id: guardId,
         is_broadcast: false,
+        type: "info",
+        user_role: "guard"
       }]);
 
       showToast("Shift assigned & guard notified!", "success");
@@ -146,10 +149,12 @@ function Shifts() {
       const lines = Object.entries(shiftTimings)
         .map(([sn, t]) => `• ${sn}: ${t.start} → ${t.end}`)
         .join("\n");
-      await supabase.from("circulars").insert([{
+      await supabase.from("notifications").insert([{
         title: "⏰ Shift Timings Updated",
-        content: `The following shift timings have been updated effective immediately:\n\n${lines}\n\nPlease note the new timings for your upcoming shifts.`,
+        message: `The following shift timings have been updated effective immediately:\n\n${lines}\n\nPlease note the new timings for your upcoming shifts.`,
         is_broadcast: true,
+        type: "info",
+        user_role: "guard"
       }]);
 
       showToast("Shift timings saved & all guards notified!", "success");
@@ -227,31 +232,33 @@ function Shifts() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-500 mb-1">Guard</label>
-              <select
+              <CustomSelect
                 value={guardId}
-                onChange={(e) => { setGuardId(e.target.value); clearError("guardId"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition bg-white ${errors.guardId ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-purple-300"}`}
-              >
-                <option value="">Select Guard</option>
-                {guards.map((guard) => (
-                  <option key={guard.id} value={guard.id}>{guard.name} — {guard.site || "No site"}</option>
-                ))}
-              </select>
+                onChange={val => { setGuardId(val); clearError("guardId"); }}
+                options={[
+                  { value: "", label: "Select Guard" },
+                  ...guards.map(g => ({ value: String(g.id), label: `${g.name} — ${g.site || "No site"}` }))
+                ]}
+                placeholder="Select Guard"
+                error={!!errors.guardId}
+                heightClass="h-12"
+              />
               {errors.guardId && <p className="text-red-500 text-sm mt-1">{errors.guardId}</p>}
             </div>
 
             <div>
               <label className="block text-sm text-gray-500 mb-1">Shift Type</label>
-              <select
+              <CustomSelect
                 value={shiftName}
-                onChange={(e) => handleShiftChange(e.target.value)}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition bg-white ${errors.shiftName ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-purple-300"}`}
-              >
-                <option value="">Select Shift</option>
-                {SHIFT_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                onChange={val => handleShiftChange(val)}
+                options={[
+                  { value: "", label: "Select Shift" },
+                  ...SHIFT_OPTIONS.map(s => ({ value: s, label: s }))
+                ]}
+                placeholder="Select Shift"
+                error={!!errors.shiftName}
+                heightClass="h-12"
+              />
               {errors.shiftName && <p className="text-red-500 text-sm mt-1">{errors.shiftName}</p>}
             </div>
 

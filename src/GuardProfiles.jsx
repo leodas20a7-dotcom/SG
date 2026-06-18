@@ -6,6 +6,39 @@ function GuardProfiles() {
   const [loading, setLoading] = useState(true);
   const [selectedGuard, setSelectedGuard] = useState(null);
   const [activePreviewDoc, setActivePreviewDoc] = useState(null);
+  const [uploading, setUploading] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleFileUpload(e, guardId, column) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File is too large. Maximum allowed size is 5MB.");
+      e.target.value = ""; // Reset input
+      return;
+    }
+
+    setUploading(column);
+    setError("");
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${guardId}_${column}_${Date.now()}.${fileExt}`;
+      const { error: upErr } = await supabase.storage.from("guard-documents").upload(fileName, file);
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from("guard-documents").getPublicUrl(fileName);
+      
+      const { error: dbErr } = await supabase.from("guards").update({ [column]: publicUrl }).eq("id", guardId);
+      if (dbErr) throw dbErr;
+
+      setGuards(prev => prev.map(g => g.id === guardId ? { ...g, [column]: publicUrl } : g));
+      setSelectedGuard(prev => ({ ...prev, [column]: publicUrl }));
+    } catch (err) {
+      setError("Upload failed: " + err.message);
+    }
+    setUploading("");
+  }
 
   async function fetchGuards() {
     setLoading(true);
@@ -23,7 +56,7 @@ function GuardProfiles() {
   }, []);
 
   const total = guards.length;
-  const fullyVerified = guards.filter(g => g.doc_aadhaar && g.doc_security_licence).length;
+  const fullyVerified = guards.filter(g => g.doc_security_licence).length;
   const pending = total - fullyVerified;
 
   return (
@@ -69,7 +102,6 @@ function GuardProfiles() {
               <thead>
                 <tr className="bg-white border-b border-gray-100">
                   <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Guard</th>
-                  <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Aadhaar</th>
                   <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Sec. Licence</th>
                   <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Dr. Licence</th>
                   <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Certificates</th>
@@ -82,9 +114,8 @@ function GuardProfiles() {
                     <td colSpan="6" className="p-8 text-center text-gray-400">No guards found</td>
                   </tr>
                 ) : guards.map(g => {
-                  const hasAadhaar = !!g.doc_aadhaar;
                   const hasSec = !!g.doc_security_licence;
-                  const isVerified = hasAadhaar && hasSec;
+                  const isVerified = hasSec;
                   
                   return (
                     <tr 
@@ -106,9 +137,6 @@ function GuardProfiles() {
                             <p className="text-xs text-gray-400 font-mono">{g.phone || "No phone"}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        {hasAadhaar ? <span className="text-emerald-500 bg-emerald-50 w-8 h-8 rounded-full inline-flex items-center justify-center">✅</span> : <span className="text-red-400 text-xs font-bold">Pending</span>}
                       </td>
                       <td className="p-4 text-center">
                         {hasSec ? <span className="text-emerald-500 bg-emerald-50 w-8 h-8 rounded-full inline-flex items-center justify-center">✅</span> : <span className="text-red-400 text-xs font-bold">Pending</span>}
@@ -143,6 +171,8 @@ function GuardProfiles() {
             </div>
             
             <div className="p-6 overflow-y-auto">
+              {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm">{error}</div>}
+              
               <div className="flex flex-col sm:flex-row gap-6 mb-8 items-center sm:items-start">
                 <div className="w-32 h-32 rounded-full bg-gray-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center shrink-0">
                   {selectedGuard.profile_picture ? (
@@ -166,7 +196,6 @@ function GuardProfiles() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[
-                  { key: "doc_aadhaar", label: "Aadhaar Card", req: true },
                   { key: "doc_security_licence", label: "Security Licence", req: true },
                   { key: "doc_driving_licence", label: "Driving Licence", req: false },
                   { key: "doc_certificates", label: "Certificates", req: false }
@@ -179,14 +208,26 @@ function GuardProfiles() {
                         <p className="text-xs text-gray-500">{doc.req ? "Required" : "Optional"}</p>
                       </div>
                       {url ? (
-                        <button 
-                          onClick={() => setActivePreviewDoc({ label: doc.label, url })}
-                          className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5 animate-pulse-subtle"
-                        >
-                          <span>👁️</span> View
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => setActivePreviewDoc({ label: doc.label, url })}
+                            className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5 animate-pulse-subtle"
+                          >
+                            <span>👁️</span> View
+                          </button>
+                          <label className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ${uploading === doc.key ? "bg-gray-200 text-gray-500" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}>
+                            {uploading === doc.key ? "..." : "Replace"}
+                            <input type="file" className="hidden" accept=".pdf,image/*" disabled={uploading === doc.key} onChange={(e) => handleFileUpload(e, selectedGuard.id, doc.key)} />
+                          </label>
+                        </div>
                       ) : (
-                        <span className="px-3 py-1.5 bg-gray-200 text-gray-400 rounded-lg text-xs font-bold">Missing</span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1.5 bg-gray-200 text-gray-400 rounded-lg text-xs font-bold">Missing</span>
+                          <label className={`px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ${uploading === doc.key ? "bg-gray-200 text-gray-500" : "bg-blue-600 hover:bg-blue-700 text-white"}`}>
+                            {uploading === doc.key ? "Uploading..." : "Upload"}
+                            <input type="file" className="hidden" accept=".pdf,image/*" disabled={uploading === doc.key} onChange={(e) => handleFileUpload(e, selectedGuard.id, doc.key)} />
+                          </label>
+                        </div>
                       )}
                     </div>
                   )

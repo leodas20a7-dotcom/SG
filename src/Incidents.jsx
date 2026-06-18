@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import { addToQueue, getCached, setCached } from "./lib/offlineDb";
 import LoadingOverlay from "./LoadingOverlay";
+import CustomSelect from "./CustomSelect";
 
 const INCIDENT_TYPES = ["Theft", "Fire", "Fight", "Suspicious Activity", "Emergency", "Visitor Issue"];
 const STATUS_OPTIONS = ["Open", "Investigating", "Closed"];
@@ -217,42 +218,176 @@ function Incidents({ role, guardId: currentGuardId }) {
 
   function downloadPdf(incident) {
     const guardName = incident.guards?.name || "Unknown Guard";
-    const dateStr = new Date(incident.created_at).toLocaleString();
+    const dateStr = new Date(incident.created_at).toLocaleString('en-AU', { dateStyle: 'full', timeStyle: 'short' });
     const printWindow = window.open("", "_blank");
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>Incident Report - ${incident.id}</title>
           <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; }
-            h1 { border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; color: #1f2937; }
-            .meta { margin-bottom: 30px; font-size: 14px; color: #6b7280; }
-            .section { margin-bottom: 20px; }
-            .label { font-weight: bold; color: #4b5563; }
-            .content { margin-top: 5px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            body { 
+              font-family: 'Inter', sans-serif; 
+              padding: 40px; 
+              color: #1f2937; 
+              line-height: 1.6; 
+              background-color: #fff;
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 3px solid #2563eb;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .header-logo {
+              font-size: 28px;
+              font-weight: 700;
+              color: #1e3a8a;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+            .header-title {
+              text-align: right;
+            }
+            .header-title h1 {
+              margin: 0;
+              font-size: 24px;
+              color: #dc2626;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .header-title p {
+              margin: 5px 0 0;
+              font-size: 12px;
+              color: #6b7280;
+            }
+            .grid-meta {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 15px;
+              background: #f8fafc;
+              padding: 20px;
+              border-radius: 8px;
+              border: 1px solid #e2e8f0;
+              margin-bottom: 30px;
+            }
+            .meta-item {
+              display: flex;
+              flex-direction: column;
+            }
+            .meta-label {
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              color: #64748b;
+              font-weight: 600;
+              margin-bottom: 4px;
+            }
+            .meta-value {
+              font-size: 15px;
+              font-weight: 600;
+              color: #0f172a;
+            }
+            .section {
+              margin-bottom: 30px;
+            }
+            .section-title {
+              font-size: 18px;
+              font-weight: 700;
+              color: #1e293b;
+              border-bottom: 2px solid #e2e8f0;
+              padding-bottom: 8px;
+              margin-bottom: 15px;
+            }
+            .content-box {
+              background: #fff;
+              padding: 20px;
+              border-radius: 8px;
+              border: 1px solid #cbd5e1;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+              font-size: 15px;
+              white-space: pre-wrap;
+              color: #334155;
+            }
+            .evidence-img {
+              max-width: 100%;
+              max-height: 400px;
+              border-radius: 8px;
+              border: 2px solid #e2e8f0;
+              display: block;
+              margin: 0 auto;
+            }
+            .footer {
+              margin-top: 50px;
+              border-top: 1px solid #cbd5e1;
+              padding-top: 20px;
+              display: flex;
+              justify-content: space-between;
+              font-size: 12px;
+              color: #94a3b8;
+            }
+            @media print {
+              body { padding: 0; }
+              .content-box { box-shadow: none; border: 1px solid #94a3b8; }
+            }
           </style>
         </head>
         <body>
-          <h1>Official Incident Report</h1>
-          <div class="meta">
-            <p><span class="label">Date Reported:</span> ${dateStr}</p>
-            <p><span class="label">Reporting Officer:</span> ${guardName}</p>
-            <p><span class="label">Incident Type:</span> ${incident.incident_type}</p>
-            <p><span class="label">Status:</span> ${incident.incident_status}</p>
+          <div class="header">
+            <div class="header-logo">
+              🛡️ Security Command
+            </div>
+            <div class="header-title">
+              <h1>Incident Report</h1>
+              <p>CONFIDENTIAL DOCUMENT</p>
+            </div>
           </div>
+
+          <div class="grid-meta">
+            <div class="meta-item">
+              <span class="meta-label">Incident ID</span>
+              <span class="meta-value">#${incident.id}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Date & Time</span>
+              <span class="meta-value">${dateStr}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Reporting Officer</span>
+              <span class="meta-value">${guardName}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Incident Classification</span>
+              <span class="meta-value" style="color: #dc2626;">${incident.incident_type}</span>
+            </div>
+            <div class="meta-item" style="grid-column: span 2;">
+              <span class="meta-label">Current Status</span>
+              <span class="meta-value">${incident.incident_status}</span>
+            </div>
+          </div>
+
           <div class="section">
-            <div class="label">Incident Description / Statement</div>
-            <div class="content">${incident.description || "No description provided."}</div>
+            <div class="section-title">Official Statement / Details</div>
+            <div class="content-box">${incident.description || "No official statement provided."}</div>
           </div>
+
           ${incident.image_url ? `
           <div class="section">
-            <div class="label">Attached Evidence (Photo)</div>
-            <div style="margin-top: 10px; text-align: center;">
-              <img src="${incident.image_url}" alt="Incident Evidence" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);" />
+            <div class="section-title">Photographic Evidence</div>
+            <div style="margin-top: 15px;">
+              <img src="${incident.image_url}" alt="Incident Evidence" class="evidence-img" />
             </div>
           </div>` : ''}
-          <div style="margin-top: 50px; border-top: 1px dashed #ccc; padding-top: 20px; font-size: 12px; color: #9ca3af; text-align: center;">
-            Generated by Safety Guard Management Platform
+
+          <div class="footer">
+            <span>Generated by SG Platform</span>
+            <span>Page 1 of 1</span>
           </div>
         </body>
       </html>
@@ -336,16 +471,17 @@ function Incidents({ role, guardId: currentGuardId }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-500 mb-1">Incident Type</label>
-                <select
+                <CustomSelect
                   value={incidentType}
-                  onChange={(e) => { setIncidentType(e.target.value); clearError("incidentType"); }}
-                  className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition bg-white ${errors.incidentType ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-red-300"}`}
-                >
-                  <option value="">Select Incident Type</option>
-                  {INCIDENT_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
+                  onChange={val => { setIncidentType(val); clearError("incidentType"); }}
+                  options={[
+                    { value: "", label: "Select Incident Type" },
+                    ...INCIDENT_TYPES.map(t => ({ value: t, label: t }))
+                  ]}
+                  placeholder="Select Incident Type"
+                  error={!!errors.incidentType}
+                  heightClass="h-12"
+                />
                 {errors.incidentType && <p className="text-red-500 text-sm mt-1">{errors.incidentType}</p>}
               </div>
 
@@ -493,13 +629,14 @@ function Incidents({ role, guardId: currentGuardId }) {
 
                         {role !== "guard" && (
                           <div className="flex items-center gap-2 ml-auto">
-                            <select
+                            <CustomSelect
                               value={incident.incident_status}
-                              onChange={(e) => updateStatus(incident.id, e.target.value)}
-                              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-blue-300 transition bg-gray-50"
-                            >
-                              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                              onChange={val => updateStatus(incident.id, val)}
+                              options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
+                              placeholder="Select Status"
+                              heightClass="h-8"
+                              className="w-32"
+                            />
                             <button
                               onClick={() => downloadPdf(incident)}
                               className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition flex items-center gap-1"

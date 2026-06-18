@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
+import CustomSelect from "./CustomSelect";
 
 function SystemAccess() {
   const [users, setUsers] = useState([]);
@@ -112,11 +113,16 @@ function SystemAccess() {
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Role</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)}
-                className="w-full h-12 border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-300 bg-white">
-                <option value="supervisor">Supervisor</option>
-                <option value="admin">Admin</option>
-              </select>
+              <CustomSelect
+                value={role}
+                onChange={val => setRole(val)}
+                options={[
+                  { value: "supervisor", label: "Supervisor" },
+                  { value: "admin", label: "Admin" }
+                ]}
+                placeholder="Supervisor"
+                heightClass="h-12"
+              />
             </div>
           </div>
           <button onClick={addUser} disabled={loading}

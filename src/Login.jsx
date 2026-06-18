@@ -49,7 +49,7 @@ function Login({ setSession }) {
       }
 
       showToast("Login successful! Welcome back.", "success");
-      setTimeout(() => setSession(data.session), 500);
+      // The session will be automatically handled by App.jsx's onAuthStateChange listener
     } catch (err) {
       showToast("Something went wrong. Please try again later.", "error");
     } finally {

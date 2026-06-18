@@ -100,7 +100,8 @@ function App() {
       .from("profiles")
       .select("role, full_name")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
+      
     if (profile) {
       setRole(profile.role);
       if (profile.role === "guard") {
@@ -114,6 +115,11 @@ function App() {
           setGuardName(guard.name);
         }
       }
+    } else {
+      // Profile deleted or not found -> invalidate session
+      await supabase.auth.signOut();
+      setSession(null);
+      setRole("");
     }
     setLoading(false);
   }

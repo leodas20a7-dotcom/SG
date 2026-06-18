@@ -1,6 +1,6 @@
 function ConfirmModal({ message, onConfirm, onCancel }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/20 backdrop-blur-sm">
       <div className="glass-card rounded-2xl p-6 w-[380px]">
         <p className="text-lg mb-6 text-gray-700">{message}</p>
         <div className="flex gap-3 justify-end">

@@ -4,6 +4,8 @@ import { useToast } from "./Toast";
 import Camera from "./Camera";
 import { calcDistance, getLocation, uploadPhoto } from "./lib/geoUtils";
 import LoadingOverlay from "./LoadingOverlay";
+import CustomSelect from "./CustomSelect";
+import ConfirmModal from "./ConfirmModal";
 
 function Attendance({ role, userGuardId, hideHistory }) {
   const [guards, setGuards] = useState([]);
@@ -22,12 +24,24 @@ function Attendance({ role, userGuardId, hideHistory }) {
   const [gpsStatus, setGpsStatus] = useState(null);
   const trackingRef = useRef(null);
   const [previewPhoto, setPreviewPhoto] = useState(null);
+
+  // Filters state
   const [filterGuard, setFilterGuard] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [showFiltersModal, setShowFiltersModal] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+
+
+  // Confirm Modal state
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
   const { showToast, ToastContainer } = useToast();
 
   const isAbsent = status === "Absent";
@@ -41,6 +55,17 @@ function Attendance({ role, userGuardId, hideHistory }) {
     const matchesEndDate = filterEndDate ? recordDate <= filterEndDate : true;
     return matchesGuard && matchesLocation && matchesStatus && matchesStartDate && matchesEndDate;
   });
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterGuard, filterLocation, filterStatus, filterStartDate, filterEndDate]);
+
+  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+  const paginatedRecords = filteredRecords.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   function downloadReportCSV() {
     if (filteredRecords.length === 0) {
@@ -153,8 +178,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
 
   function getGuardCurrentAttendance(records, gId) {
     const today = new Date().toISOString().split("T")[0];
-    // Fix today condition: check_in_time ISO timestamp starts with date string
-    return records.find((r) => r.guard_id === gId && r.check_in_time?.startsWith(today) && r.check_in_photo && !r.check_out_photo);
+    return records.find((r) => r.guard_id === gId && r.check_in_time?.startsWith(today) && !r.check_out_time);
   }
 
   useEffect(() => {
@@ -234,6 +258,56 @@ function Attendance({ role, userGuardId, hideHistory }) {
       setGpsStatus(null);
     }
   }
+
+  async function deleteFileFromStorage(publicUrl) {
+    if (!publicUrl) return;
+    try {
+      const parts = publicUrl.split("/guard-photos/");
+      if (parts.length > 1) {
+        let fileName = parts[1];
+        // Strip query parameters and hash components (e.g. ?t=... or #...)
+        fileName = fileName.split("?")[0].split("#")[0];
+        const { error } = await supabase.storage.from("guard-photos").remove([fileName]);
+        if (error) {
+          console.error("Storage delete error for file:", fileName, error);
+          showToast(`Storage error: Could not delete "${fileName}". Ensure your Supabase Storage bucket policy allows DELETE operations.`, "warning");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete storage file:", err);
+    }
+  }
+
+  async function executeDeleteAttendanceRecord(id) {
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+
+    setLoading(true);
+    try {
+      // 1. Delete storage files
+      if (record.check_in_photo) await deleteFileFromStorage(record.check_in_photo);
+      if (record.check_out_photo) await deleteFileFromStorage(record.check_out_photo);
+
+      // 2. Delete database record
+      const { error } = await supabase.from("attendance").delete().eq("id", id);
+      if (error) throw error;
+
+      showToast("Attendance record and associated photos deleted.", "success");
+      fetchAttendance();
+    } catch (err) {
+      showToast("Failed to delete record: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function deleteAttendanceRecord(id) {
+    setConfirmConfig({
+      message: "Are you sure you want to delete this attendance record and its selfie images?",
+      onConfirm: () => executeDeleteAttendanceRecord(id)
+    });
+  }
+
 
   async function onCameraCapture(dataUrl) {
     if (cameraMode === "checkin") {
@@ -341,13 +415,24 @@ function Attendance({ role, userGuardId, hideHistory }) {
       {loading && <LoadingOverlay message={gpsStatus || "Processing attendance..."} />}
       {showCamera && <Camera onCapture={onCameraCapture} onClose={() => { setShowCamera(false); setCameraMode(null); setLoading(false); setGpsStatus(null); }} />}
       {previewPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setPreviewPhoto(null)}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60" onClick={() => setPreviewPhoto(null)}>
           <div className="relative max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setPreviewPhoto(null)} className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-gray-600 hover:text-gray-900 text-lg z-10">&times;</button>
             <img src={previewPhoto} alt="Attendance photo" className="w-full rounded-2xl shadow-2xl" />
           </div>
         </div>
       )}
+      {confirmConfig && (
+        <ConfirmModal
+          message={confirmConfig.message}
+          onConfirm={() => {
+            confirmConfig.onConfirm();
+            setConfirmConfig(null);
+          }}
+          onCancel={() => setConfirmConfig(null)}
+        />
+      )}
+
       <div className="mt-2">
 
         <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-indigo-200">
@@ -357,29 +442,45 @@ function Attendance({ role, userGuardId, hideHistory }) {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm text-gray-500 mb-1">Guard</label>
-              <select value={guardId} onChange={(e) => { setGuardId(e.target.value); clearError("guardId"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition bg-white ${errors.guardId ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-indigo-300"}`}>
-                <option value="">Select Guard</option>
-                {guards.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
-              </select>
+              <CustomSelect
+                value={guardId}
+                onChange={val => { setGuardId(val); clearError("guardId"); }}
+                options={[
+                  { value: "", label: "Select Guard" },
+                  ...guards.map(g => ({ value: String(g.id), label: g.name }))
+                ]}
+                placeholder="Select Guard"
+                error={!!errors.guardId}
+                heightClass="h-12"
+              />
               {errors.guardId && <p className="text-red-500 text-sm mt-1">{errors.guardId}</p>}
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Duty Location</label>
-              <select value={dutyLocationId} onChange={(e) => setDutyLocationId(e.target.value)}
-                className="w-full h-12 border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-                <option value="">Select Location</option>
-                {locations.map((l) => (<option key={l.id} value={l.id}>{l.place_name} ({l.radius_meters}m)</option>))}
-              </select>
+              <CustomSelect
+                value={dutyLocationId}
+                onChange={val => setDutyLocationId(val)}
+                options={[
+                  { value: "", label: "Select Location" },
+                  ...locations.map(l => ({ value: String(l.id), label: `${l.place_name} (${l.radius_meters}m)` }))
+                ]}
+                placeholder="Select Location"
+                heightClass="h-12"
+              />
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Status</label>
-              <select value={status} onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full h-12 border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-                <option value="Present">Present</option>
-                <option value="Absent">Absent</option>
-                <option value="Leave">Leave</option>
-              </select>
+              <CustomSelect
+                value={status}
+                onChange={val => handleStatusChange(val)}
+                options={[
+                  { value: "Present", label: "Present" },
+                  { value: "Absent", label: "Absent" },
+                  { value: "Leave", label: "Leave" }
+                ]}
+                placeholder="Select Status"
+                heightClass="h-12"
+              />
             </div>
             <div className="flex items-end gap-2">
               {isOnDuty ? (
@@ -400,24 +501,21 @@ function Attendance({ role, userGuardId, hideHistory }) {
               {gpsStatus}
             </div>
           )}
-          <div className="mt-3">
-            <button onClick={markManualAttendance} disabled={loading || isOnDuty}
-              className="text-sm text-gray-500 hover:text-gray-700 underline">Manual entry (no GPS)</button>
-          </div>
         </div>
 
         {!hideHistory && (
           <div className="space-y-4 mt-6">
             {/* Filters and Actions Bar */}
-            <div className="flex justify-between items-center bg-transparent mb-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-transparent mb-0">
               <h3 className="text-lg font-bold text-gray-800">📋 Attendance History</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
                 <button
                   onClick={() => setShowFiltersModal(true)}
                   className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap"
                 >
                   🔍 Filter Option
                 </button>
+
                 <button
                   onClick={downloadReportCSV}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap"
@@ -436,7 +534,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
             {/* Filter Overlay Popup Modal */}
             {showFiltersModal && (
               <div className="fixed inset-0 z-[150] bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
                   {/* Modal Header */}
                   <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                     <div>
@@ -449,38 +547,41 @@ function Attendance({ role, userGuardId, hideHistory }) {
                   <div className="p-6 space-y-4">
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Guard</label>
-                      <select
+                      <CustomSelect
                         value={filterGuard}
-                        onChange={(e) => setFilterGuard(e.target.value)}
-                        className="w-full h-11 border border-gray-300 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
-                      >
-                        <option value="">All Guards</option>
-                        {guards.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
-                      </select>
+                        onChange={val => setFilterGuard(val)}
+                        options={[
+                          { value: "", label: "All Guards" },
+                          ...guards.map(g => ({ value: String(g.id), label: g.name }))
+                        ]}
+                        placeholder="All Guards"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Location</label>
-                      <select
+                      <CustomSelect
                         value={filterLocation}
-                        onChange={(e) => setFilterLocation(e.target.value)}
-                        className="w-full h-11 border border-gray-300 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
-                      >
-                        <option value="">All Locations</option>
-                        {locations.map((l) => (<option key={l.id} value={l.id}>{l.place_name}</option>))}
-                      </select>
+                        onChange={val => setFilterLocation(val)}
+                        options={[
+                          { value: "", label: "All Locations" },
+                          ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
+                        ]}
+                        placeholder="All Locations"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
-                      <select
+                      <CustomSelect
                         value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value)}
-                        className="w-full h-11 border border-gray-300 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
-                      >
-                        <option value="">All Statuses</option>
-                        <option value="Present">Present</option>
-                        <option value="Absent">Absent</option>
-                        <option value="Leave">Leave</option>
-                      </select>
+                        onChange={val => setFilterStatus(val)}
+                        options={[
+                          { value: "", label: "All Statuses" },
+                          { value: "Present", label: "Present" },
+                          { value: "Absent", label: "Absent" },
+                          { value: "Leave", label: "Leave" }
+                        ]}
+                        placeholder="All Statuses"
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -489,7 +590,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                           type="date"
                           value={filterStartDate}
                           onChange={(e) => setFilterStartDate(e.target.value)}
-                          className="w-full h-11 border border-gray-300 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
+                          className="w-full h-11 border border-gray-350 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
                         />
                       </div>
                       <div>
@@ -498,7 +599,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                           type="date"
                           value={filterEndDate}
                           onChange={(e) => setFilterEndDate(e.target.value)}
-                          className="w-full h-11 border border-gray-300 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
+                          className="w-full h-11 border border-gray-350 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm bg-white"
                         />
                       </div>
                     </div>
@@ -529,8 +630,10 @@ function Attendance({ role, userGuardId, hideHistory }) {
               </div>
             )}
 
+
+
             {/* Table Card */}
-            <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="glass-card rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse min-w-[800px]">
                   <thead>
@@ -542,12 +645,13 @@ function Attendance({ role, userGuardId, hideHistory }) {
                       <th className="text-left p-4 text-gray-600 font-semibold">Check Out</th>
                       <th className="text-left p-4 text-gray-600 font-semibold">Status</th>
                       <th className="text-left p-4 text-gray-600 font-semibold">Photo</th>
+                      {role === "admin" && <th className="text-center p-4 text-gray-600 font-semibold w-24">Action</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRecords.length === 0 ? (
-                      <tr><td colSpan={7} className="p-8 text-center text-gray-400">No attendance records matching the filters.</td></tr>
-                    ) : filteredRecords.map((item) => (
+                    {paginatedRecords.length === 0 ? (
+                      <tr><td colSpan={role === "admin" ? 8 : 7} className="p-8 text-center text-gray-400">No attendance records matching the filters.</td></tr>
+                    ) : paginatedRecords.map((item) => (
                       <tr key={item.id} className="border-b hover:bg-gray-50 transition">
                         <td className="p-4 font-medium">{item.guards?.name}</td>
                         <td className="p-4 text-gray-500">{item.check_in_time?.split("T")[0] || item.date}</td>
@@ -588,19 +692,55 @@ function Attendance({ role, userGuardId, hideHistory }) {
                         <td className="p-4">
                           <div className="flex gap-1">
                             {item.check_in_photo ? (
-                              <button onClick={() => setPreviewPhoto(item.check_in_photo)} className="text-blue-500 hover:underline text-sm">📸 In</button>
+                              <button onClick={() => setPreviewPhoto(item.check_in_photo)} className="text-blue-500 hover:underline text-sm font-semibold">📸 In</button>
                             ) : null}
                             {item.check_out_photo ? (
-                              <button onClick={() => setPreviewPhoto(item.check_out_photo)} className="text-blue-500 hover:underline text-sm ml-2">📸 Out</button>
+                              <button onClick={() => setPreviewPhoto(item.check_out_photo)} className="text-blue-500 hover:underline text-sm font-semibold ml-2">📸 Out</button>
                             ) : null}
                             {!item.check_in_photo && !item.check_out_photo ? "—" : null}
                           </div>
                         </td>
+                        {role === "admin" && (
+                          <td className="p-4 text-center">
+                            <button
+                              onClick={() => deleteAttendanceRecord(item.id)}
+                              className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1.5 rounded-xl text-xs font-bold transition"
+                              title="Delete Record"
+                            >
+                              🗑️ Delete
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="px-6 py-4 bg-gray-50 border-t flex justify-between items-center">
+                  <span className="text-xs text-gray-500">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredRecords.length)} of {filteredRecords.length} records
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold bg-white text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      ◀ Prev
+                    </button>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold bg-white text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      Next ▶
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

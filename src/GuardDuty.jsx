@@ -16,7 +16,7 @@ function fmt(iso) {
 }
 function fmtDate(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return new Date(iso).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
 }
 
 function AudioPlayer({ src }) {
@@ -66,10 +66,16 @@ function LanguageDropdown({ locale, setLocale, isMobile = false }) {
 
   const languages = [
     { code: "en", label: "English" },
+    { code: "zh", label: "中文" },
+    { code: "ar", label: "العربية" },
+    { code: "vi", label: "Tiếng Việt" },
+    { code: "pa", label: "ਪੰਜਾਬੀ" },
     { code: "hi", label: "हिंदी" },
+    { code: "el", label: "Ελληνικά" },
+    { code: "it", label: "Italiano" },
+    { code: "tl", label: "Tagalog" },
+    { code: "es", label: "Español" },
     { code: "ta", label: "தமிழ்" },
-    { code: "te", label: "తెలుగు" },
-    { code: "kn", label: "ಕನ್ನಡ" },
   ];
 
   useEffect(() => {
@@ -97,7 +103,7 @@ function LanguageDropdown({ locale, setLocale, isMobile = false }) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-36 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-hidden z-50 py-1 origin-top-right">
+        <div className="absolute top-full right-0 mt-2 w-36 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-y-auto max-h-48 z-50 py-1 origin-top-right">
           {languages.map((lang) => (
             <button
               key={lang.code}
@@ -123,7 +129,6 @@ function LanguageDropdown({ locale, setLocale, isMobile = false }) {
 const TABS = [
   { key: "duty", label: "Duty Control", icon: "📍", desc: "Check In / Out" },
   { key: "history", label: "Attendance", icon: "📋", desc: "Your History" },
-  { key: "requests", label: "Issues", icon: "💬", desc: "Report Problem" },
   { key: "incidents", label: "Incidents", icon: "🚨", desc: "Report Incidents" },
   { key: "circulars", label: "Circulars", icon: "📢", desc: "Announcements" },
 ];/* ─── Circular feed (read-only) ─── */
@@ -143,28 +148,7 @@ function CircularFeed({ guardId, guardName }) {
     }
     query
       .then(({ data }) => {
-        let finalData = data || [];
-        if (guardName) {
-          finalData = finalData.filter(item => {
-            const pattern = /(?:Update|Assignment|Assigned|Update)\s*[\u2013-]\s*([^\n\r]+)/i;
-            const match = item.title.match(pattern);
-            if (match) {
-              const nameInTitle = match[1].trim();
-              if (nameInTitle.toLowerCase() !== guardName.toLowerCase()) {
-                return false;
-              }
-            }
-            const guardPattern = /Guard\s+([A-Za-z]+)/i;
-            const guardMatch = item.content.match(guardPattern);
-            if (guardMatch) {
-              const nameInContent = guardMatch[1].trim();
-              if (nameInContent.toLowerCase() !== guardName.toLowerCase()) {
-                return false;
-              }
-            }
-            return true;
-          });
-        }
+        const finalData = data || [];
         setItems(finalData);
         setCached("circulars", finalData);
       })
@@ -265,6 +249,13 @@ function GuardProfilePanel({ guardId, onClose, onSosPanic, sendingSos }) {
   async function handleFileUpload(e, column) {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File is too large. Maximum allowed size is 5MB.");
+      e.target.value = ""; // Reset input
+      return;
+    }
+
     setUploading(column);
     setError("");
     try {
@@ -288,7 +279,6 @@ function GuardProfilePanel({ guardId, onClose, onSosPanic, sendingSos }) {
   if (!profile) return <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">Loading...</div>;
 
   const DOCS = [
-    { key: "doc_aadhaar", label: "Aadhaar Card", req: true },
     { key: "doc_security_licence", label: "Security Licence", req: true },
     { key: "doc_driving_licence", label: "Driving Licence", req: false },
     { key: "doc_certificates", label: "Other Certificates", req: false },
@@ -387,10 +377,15 @@ function GuardDuty({ guardId, guardName }) {
   const [dutyLocation, setDutyLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
+  const [showSosConfirm, setShowSosConfirm] = useState(false);
   const { showToast, ToastContainer } = useToast();
 
-  async function handleSosPanic() {
-    if (!confirm("Are you sure you want to trigger an emergency SOS panic alert?")) return;
+  function handleSosPanic() {
+    setShowSosConfirm(true);
+  }
+
+  async function executeSosPanic() {
+    setShowSosConfirm(false);
     setSendingSos(true);
     try {
       let lat = null;
@@ -452,6 +447,8 @@ function GuardDuty({ guardId, guardName }) {
   const [submitting, setSubmitting] = useState(false);
 
   const [showProfile, setShowProfile] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
 
   const [isOnTempDuty, setIsOnTempDuty] = useState(false);
   const [primaryLocation, setPrimaryLocation] = useState(null);
@@ -718,7 +715,7 @@ function GuardDuty({ guardId, guardName }) {
       if (data && data.length > 0) {
         rec = data[0];
         setTodayRecord(rec);
-        if (rec.check_in_photo && !rec.check_out_photo) {
+        if (rec.check_in_time && !rec.check_out_time) {
           active = true;
           attId = rec.id;
           since = rec.check_in_time;
@@ -996,13 +993,16 @@ function GuardDuty({ guardId, guardName }) {
     if (!reqMessage.trim() && !audioBlob) { setError("Add a message or record a voice note."); return; }
     setSubmitting(true); setError("");
     try {
+      const timePart = new Date().toISOString().split("T")[1];
+      const customTimestamp = `${issueDate}T${timePart}`;
+
       if (!navigator.onLine) {
         await addToQueue("issue", {
           guardId,
           requestType: audioBlob ? "voice" : "text",
           message: reqMessage.trim() || "Voice note submitted",
           audioBlob: audioBlob || null,
-          timestamp: new Date().toISOString()
+          timestamp: customTimestamp
         });
 
         // Add locally to request history list cache so it shows in history panel immediately
@@ -1013,13 +1013,14 @@ function GuardDuty({ guardId, guardName }) {
           message: reqMessage.trim() || "Voice note submitted",
           audio_url: audioUrl || null,
           status: "Pending",
-          created_at: new Date().toISOString()
+          created_at: customTimestamp
         };
         const updatedRequests = [newRequestItem, ...cachedRequests];
         setCached(`my_requests_${guardId}`, updatedRequests);
 
         setStatus("💾 Request saved offline! Will sync when connected.", "success");
         setReqMessage(""); setAudioBlob(null); setAudioUrl("");
+        setShowReportModal(false);
         setTimeout(() => setGpsStatus(null), 3000);
         setSubmitting(false);
         return;
@@ -1034,10 +1035,12 @@ function GuardDuty({ guardId, guardName }) {
       const { error: insErr } = await supabase.from("attendance_requests").insert([{
         guard_id: guardId, request_type: audioBlob ? "voice" : "text",
         message: reqMessage.trim() || "Voice note submitted", audio_url: audioUploadUrl, status: "Pending",
+        created_at: customTimestamp
       }]);
       if (insErr) throw insErr;
       setStatus("✅ Request sent to admin.", "success");
       setReqMessage(""); setAudioBlob(null); setAudioUrl("");
+      setShowReportModal(false);
       setTimeout(() => setGpsStatus(null), 3000);
     } catch (err) { setError(err.message); }
     setSubmitting(false);
@@ -1162,7 +1165,7 @@ function GuardDuty({ guardId, guardName }) {
           </div>
           <div className="col-span-2">
             <p className="text-gray-400 text-xs mb-0.5">{t("today")}</p>
-            <p className="font-semibold text-gray-800">{new Date().toLocaleDateString(locale === "en" ? "en-IN" : locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+            <p className="font-semibold text-gray-800">{new Date().toLocaleDateString(locale === "en" ? "en-AU" : locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           </div>
         </div>
       </div>
@@ -1171,9 +1174,20 @@ function GuardDuty({ guardId, guardName }) {
 
   const historyPanel = (
     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-50">
-        <h2 className="font-bold text-gray-800 text-lg">{t("attendance_history")}</h2>
-        <p className="text-xs text-gray-400 mt-0.5">{attendanceHistory.length} {t("records_found")}</p>
+      <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
+        <div>
+          <h2 className="font-bold text-gray-800 text-lg">{t("attendance_history")}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{attendanceHistory.length} {t("records_found")}</p>
+        </div>
+        <button
+          onClick={() => {
+            setIssueDate(new Date().toISOString().split("T")[0]);
+            setShowReportModal(true);
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
+        >
+          💬 {t("report_issue")}
+        </button>
       </div>
       <div className="divide-y divide-gray-50 max-h-[60vh] overflow-y-auto">
         {attendanceHistory.length === 0 ? (
@@ -1226,85 +1240,9 @@ function GuardDuty({ guardId, guardName }) {
     </div>
   );
 
-  const requestPanel = showRequestHistory ? (
-    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-4 bg-gray-50/50">
-        <button 
-          onClick={() => setShowRequestHistory(false)}
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm border border-gray-200 text-gray-600 hover:bg-gray-50 transition shrink-0"
-        >
-          ←
-        </button>
-        <div>
-          <h2 className="font-bold text-gray-800 text-lg">{t("past_requests")}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Your submitted issue history</p>
-        </div>
-      </div>
-      <div className="p-6">
-        <MyRequests guardId={guardId} />
-      </div>
-    </div>
-  ) : (
-    <div className="space-y-4">
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
-          <div>
-            <h2 className="font-bold text-gray-800 text-lg">{t("report_issue")}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Missed check-in or GPS error? Let admin know.</p>
-          </div>
-          <button 
-            onClick={() => setShowRequestHistory(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
-          >
-            🕒 {t("history")}
-          </button>
-        </div>
-        <div className="p-6">
-          <form onSubmit={submitRequest} className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wide">{t("describe_problem")}</label>
-              <textarea
-                rows="4"
-                placeholder="e.g. GPS failed during checkout at 6 PM..."
-                value={reqMessage}
-                onChange={e => setReqMessage(e.target.value)}
-                className="w-full border border-gray-200 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
-              />
-            </div>
-
-            <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl p-5 text-center space-y-3">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{t("or_record_voice")}</p>
-              <button
-                type="button"
-                onClick={recording ? stopRecording : startRecording}
-                className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg transition-all ${recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105"
-                  }`}
-              >
-                {recording ? "⏹️" : "🎙️"}
-              </button>
-              <p className="text-xs text-gray-400">{recording ? t("recording") : t("tap_to_record")}</p>
-              {audioUrl && (
-                <div className="flex flex-col items-center gap-2">
-                  <audio src={audioUrl} controls className="w-full max-w-sm" />
-                  <button type="button" onClick={() => { setAudioBlob(null); setAudioUrl(""); }} className="text-xs text-red-500 hover:underline">{t("remove_recording")}</button>
-                </div>
-              )}
-            </div>
-
-            <button type="submit" disabled={submitting}
-              className="w-full h-13 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition shadow-md shadow-blue-100">
-              {submitting ? t("submitting") : "📤  " + t("submit_request")}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-
   const content = {
     duty: dutyPanel,
     history: historyPanel,
-    requests: requestPanel,
     incidents: <div className="-mt-10"><Incidents role="guard" guardId={guardId} /></div>,
     circulars: (
       <div className="space-y-4">
@@ -1515,7 +1453,7 @@ function GuardDuty({ guardId, guardName }) {
               )}
               <Notifications role="guard" guardId={guardId} guardName={guardName} onNavigate={setActiveTab} />
               <div className="text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-xl hidden lg:block">
-                {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                {new Date().toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}
               </div>
               {/* 🌐 Language Selector */}
               <LanguageDropdown locale={locale} setLocale={setLocale} isMobile={false} />
@@ -1561,6 +1499,120 @@ function GuardDuty({ guardId, guardName }) {
           </main>
         </div>
       </div>
+
+      {/* SOS Confirm Modal */}
+      {showSosConfirm && (
+        <div className="fixed inset-0 z-[200] bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center animate-slide-up">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center text-3xl mx-auto mb-4 animate-pulse">🚨</div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Trigger SOS Alert?</h3>
+            <p className="text-gray-500 mb-6 text-sm">This will instantly alert the administration with your live GPS location. Use only in emergencies.</p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowSosConfirm(false)}
+                className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeSosPanic}
+                className="flex-1 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition"
+              >
+                Yes, Trigger SOS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Issue Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-[100] bg-gray-900/50 backdrop-blur-sm flex items-end md:items-center justify-center md:p-4">
+          <div className="bg-white w-full max-w-md h-[90vh] md:h-auto md:max-h-[90vh] md:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:rounded-t-3xl rounded-t-3xl">
+              <div>
+                <h2 className="font-bold text-gray-800 text-lg">
+                  {showRequestHistory ? t("past_requests") : t("report_issue")}
+                </h2>
+                {!showRequestHistory && <p className="text-xs text-gray-400 mt-0.5">Missed check-in or GPS error? Let admin know.</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowRequestHistory(!showRequestHistory)}
+                  className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
+                >
+                  {showRequestHistory ? "📝 Form" : "🕒 History"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setShowRequestHistory(false);
+                    setReqMessage("");
+                    setAudioBlob(null);
+                    setAudioUrl("");
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm text-gray-500 hover:bg-gray-50 transition border border-gray-100"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              {showRequestHistory ? (
+                <MyRequests guardId={guardId} />
+              ) : (
+                <form onSubmit={submitRequest} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wide">Select Date</label>
+                    <input
+                      type="date"
+                      value={issueDate}
+                      onChange={e => setIssueDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wide">{t("describe_problem")}</label>
+                    <textarea
+                      rows="4"
+                      placeholder="e.g. GPS failed during checkout at 6 PM..."
+                      value={reqMessage}
+                      onChange={e => setReqMessage(e.target.value)}
+                      className="w-full border border-gray-200 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+                    />
+                  </div>
+
+                  <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl p-5 text-center space-y-3">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{t("or_record_voice")}</p>
+                    <button
+                      type="button"
+                      onClick={recording ? stopRecording : startRecording}
+                      className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg transition-all ${recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105"}`}
+                    >
+                      {recording ? "⏹️" : "🎙️"}
+                    </button>
+                    <p className="text-xs text-gray-400">{recording ? t("recording") : t("tap_to_record")}</p>
+                    {audioUrl && (
+                      <div className="flex flex-col items-center gap-2">
+                        <audio src={audioUrl} controls className="w-full max-w-sm" />
+                        <button type="button" onClick={() => { setAudioBlob(null); setAudioUrl(""); }} className="text-xs text-red-500 hover:underline">{t("remove_recording")}</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="submit" disabled={submitting}
+                    className="w-full h-13 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition shadow-md shadow-blue-100">
+                    {submitting ? t("submitting") : "📤  " + t("submit_request")}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -3,6 +3,11 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import ConfirmModal from "./ConfirmModal";
 import LoadingOverlay from "./LoadingOverlay";
+import PhoneInputRaw from 'react-phone-input-2';
+const PhoneInput = PhoneInputRaw.default ? PhoneInputRaw.default : PhoneInputRaw;
+import 'react-phone-input-2/lib/style.css';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import CustomSelect from "./CustomSelect";
 
 const STATUS_OPTIONS = ["Active", "Inactive"];
 const SHIFT_OPTIONS = ["Morning Shift", "Evening Shift", "Night Shift", "Full Day", "Custom"];
@@ -14,8 +19,8 @@ const DEFAULT_TIMINGS = {
 };
 
 /* ── helper: post a circular notification ── */
-async function postCircular(title, content, guardId = null, isBroadcast = false) {
-  await supabase.from("circulars").insert([{ title, content, guard_id: guardId, is_broadcast: isBroadcast }]);
+async function autoNotify(title, message, guardId = null, isBroadcast = false) {
+  await supabase.from("notifications").insert([{ title, message, guard_id: guardId, is_broadcast: isBroadcast, type: "info", user_role: "guard" }]);
 }
 
 function Guards({ onGuardAdded }) {
@@ -67,8 +72,13 @@ function Guards({ onGuardAdded }) {
     if (!name.trim()) errs.name = "Guard name is required";
     else if (name.trim().length < 2) errs.name = "Name must be at least 2 characters";
     else if (!/^[a-zA-Z\s]+$/.test(name.trim())) errs.name = "Name should only contain letters";
-    if (!phone.trim()) errs.phone = "Phone number is required";
-    else if (!/^\d{10}$/.test(phone.trim())) errs.phone = "Enter a valid 10-digit number";
+    if (!phone) errs.phone = "Phone number is required";
+    else {
+      const phoneNumber = parsePhoneNumberFromString(phone.startsWith('+') ? phone : '+' + phone);
+      if (!phoneNumber || !phoneNumber.isValid()) {
+        errs.phone = "Enter a valid international phone number";
+      }
+    }
     if (!site.trim()) errs.site = "Site is required";
     else if (site.trim().length < 2) errs.site = "Site must be at least 2 characters";
     setErrors(errs);
@@ -91,7 +101,13 @@ function Guards({ onGuardAdded }) {
   function validate() {
     const errs = {};
     if (!name.trim()) errs.name = "Guard name is required";
-    if (!phone.trim()) errs.phone = "Phone number is required";
+    if (!phone) errs.phone = "Phone number is required";
+    else {
+      const phoneNumber = parsePhoneNumberFromString(phone.startsWith('+') ? phone : '+' + phone);
+      if (!phoneNumber || !phoneNumber.isValid()) {
+        errs.phone = "Enter a valid international phone number";
+      }
+    }
     if (!site.trim()) errs.site = "Site is required";
     if (!editingId && email.trim() && !password) errs.password = "Password required";
     setErrors(errs);
@@ -156,7 +172,7 @@ function Guards({ onGuardAdded }) {
       // Notify
       if (tempLocationId && tempFrom && tempTo) {
         const locName = locations.find(l => String(l.id) === String(tempLocationId))?.place_name || "a temporary location";
-        await postCircular(
+        await autoNotify(
           `Temporary Assignment Update – ${overrideGuard.name}`,
           `Guard ${overrideGuard.name} has been assigned to ${locName} from ${tempFrom} to ${tempTo}.`,
           guardId
@@ -269,7 +285,7 @@ function Guards({ onGuardAdded }) {
       }
 
       const { data: insertData, error } = await supabase.from("guards").insert([{
-        name: name.trim(), phone: phone.trim(), site: site.trim(),
+        name: name.trim(), phone: phone.startsWith('+') ? phone : '+' + phone, site: site.trim(),
         status: status || "Active",
         duty_location_id: dutyLocationId || null,
         temp_location_id: tempLocationId || null,
@@ -325,7 +341,7 @@ function Guards({ onGuardAdded }) {
       // Auto-notify if temp location set
       if (tempLocationId && tempFrom && tempTo) {
         const locName = locations.find(l => l.id === parseInt(tempLocationId))?.place_name || "another location";
-        await postCircular(
+        await autoNotify(
           `Temporary Duty Assignment – ${name.trim()}`,
           `Guard ${name.trim()} is temporarily assigned to ${locName} from ${tempFrom} to ${tempTo}.`,
           guardId
@@ -348,7 +364,7 @@ function Guards({ onGuardAdded }) {
     setEditingId(guard.id);
     setPrevDutyLocationId(guard.duty_location_id || null);
     setName(guard.name);
-    setPhone(guard.phone);
+    setPhone(guard.phone || "");
     setSite(guard.site);
     setStatus(guard.status);
     setDutyLocationId(guard.duty_location_id || "");
@@ -426,7 +442,7 @@ function Guards({ onGuardAdded }) {
       }
 
       const { error } = await supabase.from("guards").update({
-        name: name.trim(), phone: phone.trim(), site: site.trim(), status,
+        name: name.trim(), phone: phone.startsWith('+') ? phone : '+' + phone, site: site.trim(), status,
         duty_location_id: dutyLocationId || null,
         temp_location_id: tempLocationId || null,
         temp_location_from: tempFrom || null,
@@ -497,7 +513,7 @@ function Guards({ onGuardAdded }) {
       const newLocId = dutyLocationId ? parseInt(dutyLocationId) : null;
       if (newLocId !== prevDutyLocationId) {
         const locName = locations.find(l => l.id === newLocId)?.place_name || "a new location";
-        await postCircular(
+        await autoNotify(
           `Duty Location Update – ${name.trim()}`,
           `Guard ${name.trim()}'s permanent duty location has been updated to: ${locName}.`,
           editingId
@@ -512,7 +528,7 @@ function Guards({ onGuardAdded }) {
 
       if (tempLocationId && tempFrom && tempTo && tempChanged) {
         const locName = locations.find(l => l.id === parseInt(tempLocationId))?.place_name || "a temporary location";
-        await postCircular(
+        await autoNotify(
           `Temporary Location Update – ${name.trim()}`,
           `Guard ${name.trim()} is temporarily assigned to ${locName}\nFrom: ${tempFrom}  →  To: ${tempTo}\nAttendance will be calculated at the temporary location during this period.`,
           editingId
@@ -533,13 +549,34 @@ function Guards({ onGuardAdded }) {
   /* ── delete ── */
   async function deleteGuard(id) {
     try {
+      // Get auth user id to delete profile later
+      const { data: guardData } = await supabase.from("guards").select("auth_user_id").eq("id", id).maybeSingle();
+
+      // Delete all related records first
+      await Promise.all([
+        supabase.from("attendance").delete().eq("guard_id", id),
+        supabase.from("circulars").delete().eq("guard_id", id),
+        supabase.from("incidents").delete().eq("guard_id", id),
+        supabase.from("shifts").delete().eq("guard_id", id),
+        supabase.from("live_tracking").delete().eq("guard_id", id),
+        supabase.from("notifications").delete().eq("guard_id", id),
+        supabase.from("attendance_requests").delete().eq("guard_id", id),
+      ]);
+
       const { error } = await supabase.from("guards").delete().eq("id", id);
       if (error) { showToast("Could not delete guard.", "error"); return; }
-      showToast("Guard deleted.", "success");
+
+      // Delete profile to revoke access
+      if (guardData?.auth_user_id) {
+        await supabase.from("profiles").delete().eq("id", guardData.auth_user_id);
+      }
+
+      showToast("Guard and related data deleted.", "success");
       fetchGuards();
       if (onGuardAdded) onGuardAdded();
-    } catch {
-      showToast("Network error.", "error");
+    } catch (err) {
+      console.error(err);
+      showToast("Network error or constraint failed.", "error");
     }
   }
 
@@ -580,15 +617,19 @@ function Guards({ onGuardAdded }) {
               <button onClick={() => setOverrideGuard(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
             </div>
             <p className="text-gray-500 text-sm mb-4">Set temporary shift and location override details for <strong>{overrideGuard.name}</strong>.</p>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-amber-700 mb-1">Temporary Duty Location</label>
-                <select value={tempLocationId} onChange={e => setTempLocationId(e.target.value)}
-                  className="w-full h-11 border border-amber-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white text-sm">
-                  <option value="">None (Keep Primary Location)</option>
-                  {locations.map(l => <option key={l.id} value={l.id}>{l.place_name}</option>)}
-                </select>
+                <CustomSelect
+                  value={tempLocationId}
+                  onChange={val => setTempLocationId(val)}
+                  options={[
+                    { value: "", label: "None (Keep Primary Location)" },
+                    ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
+                  ]}
+                  placeholder="None (Keep Primary Location)"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -636,18 +677,23 @@ function Guards({ onGuardAdded }) {
               <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-amber-700 mb-1">Temporary Shift Type</label>
-                  <select value={tempShiftName} onChange={e => {
-                    setTempShiftName(e.target.value);
-                    const defaultTime = DEFAULT_TIMINGS[e.target.value];
-                    if (defaultTime) {
-                      setTempStartTime(defaultTime.startSimple);
-                      setTempEndTime(defaultTime.endSimple);
-                    }
-                  }}
-                    className="w-full h-11 border border-amber-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white text-sm mb-2">
-                    <option value="">Select Temp Shift</option>
-                    {SHIFT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={tempShiftName}
+                    onChange={val => {
+                      setTempShiftName(val);
+                      const defaultTime = DEFAULT_TIMINGS[val];
+                      if (defaultTime) {
+                        setTempStartTime(defaultTime.startSimple);
+                        setTempEndTime(defaultTime.endSimple);
+                      }
+                    }}
+                    options={[
+                      { value: "", label: "Select Temp Shift" },
+                      ...SHIFT_OPTIONS.map(s => ({ value: s, label: s }))
+                    ]}
+                    placeholder="Select Temp Shift"
+                    className="mb-2"
+                  />
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] text-amber-600 font-bold">Start Time</label>
@@ -693,7 +739,7 @@ function Guards({ onGuardAdded }) {
               <h2 className="text-xl font-bold text-gray-800">📅 Shift & Location Details</h2>
               <button onClick={() => setSelectedShiftGuard(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <p className="text-xs text-gray-450 font-bold uppercase tracking-wider">Guard Name</p>
@@ -708,7 +754,7 @@ function Guards({ onGuardAdded }) {
                   const hasTempShift = selectedShiftGuard.tempShifts && selectedShiftGuard.tempShifts.length > 0 &&
                     selectedShiftGuard.temp_location_from && selectedShiftGuard.temp_location_to &&
                     today >= selectedShiftGuard.temp_location_from && today <= selectedShiftGuard.temp_location_to;
-                  
+
                   const activeShift = hasTempShift ? selectedShiftGuard.tempShifts[0] : selectedShiftGuard.constantShift;
                   return (
                     <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100/50">
@@ -787,18 +833,16 @@ function Guards({ onGuardAdded }) {
               { num: 3, name: "Login Credentials", icon: "🔑" }
             ].map(step => (
               <div key={step.num} className="flex items-center gap-2 mr-4 shrink-0">
-                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${
-                  currentStep === step.num
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-150"
-                    : currentStep > step.num
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-gray-100 text-gray-400"
-                }`}>
+                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${currentStep === step.num
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-150"
+                  : currentStep > step.num
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-gray-100 text-gray-400"
+                  }`}>
                   {currentStep > step.num ? "✓" : step.num}
                 </span>
-                <span className={`text-sm font-semibold transition ${
-                  currentStep === step.num ? "text-gray-800" : "text-gray-400"
-                }`}>
+                <span className={`text-sm font-semibold transition ${currentStep === step.num ? "text-gray-800" : "text-gray-400"
+                  }`}>
                   {step.icon} {step.name}
                 </span>
                 {step.num < 3 && <span className="text-gray-300 ml-2">➔</span>}
@@ -821,9 +865,44 @@ function Guards({ onGuardAdded }) {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-500 mb-1">Phone Number</label>
-                  <input type="text" placeholder="10-digit number" maxLength={10} value={phone}
-                    onChange={e => { setPhone(e.target.value.replace(/\D/g, "")); clearError("phone"); }}
-                    className={`w-full h-11 border p-3 rounded-xl focus:outline-none focus:ring-2 transition ${errors.phone ? "border-red-400 focus:ring-red-300" : "border-gray-200 focus:ring-blue-300"}`}
+                  <PhoneInput
+                    country={'au'}
+                    enableSearch={true}
+                    value={phone}
+                    onChange={v => { setPhone(v || ""); clearError("phone"); }}
+                    inputStyle={{
+                      width: '100%',
+                      height: '44px',
+                      borderRadius: '0.75rem',
+                      borderColor: errors.phone ? '#f87171' : '#e5e7eb',
+                      background: '#ffffff'
+                    }}
+                    buttonStyle={{
+                      borderRadius: '0.75rem 0 0 0.75rem',
+                      borderColor: errors.phone ? '#f87171' : '#e5e7eb',
+                      background: '#f9fafb'
+                    }}
+                    dropdownStyle={{
+                      width: '300px',
+                      paddingLeft: '10px',
+                      borderRadius: '0.75rem',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      border: '1px solid #e5e7eb',
+                      overflow: 'hidden',
+                      paddingTop: '0px',
+                      margin: '0px'
+                    }}
+                    searchStyle={{
+                      width: '75%',
+                      margin: '8px 5%',
+                      padding: '8px 10px 8px 30px',
+                      borderRadius: '0.5rem',
+                      border: '1px solid #d1d5db',
+                      backgroundColor: '#f9fafb',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
                   />
                   {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                 </div>
@@ -837,10 +916,12 @@ function Guards({ onGuardAdded }) {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-500 mb-1">Status</label>
-                  <select value={status} onChange={e => setStatus(e.target.value)}
-                    className="w-full h-11 border border-gray-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
-                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={status}
+                    onChange={val => setStatus(val)}
+                    options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
+                    placeholder="Select Status"
+                  />
                 </div>
               </div>
             </div>
@@ -853,28 +934,36 @@ function Guards({ onGuardAdded }) {
               <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-6 space-y-4">
                 <div>
                   <p className="text-sm font-bold text-blue-600 mb-1.5">🏠 Primary Fixed Location</p>
-                  <select value={dutyLocationId} onChange={e => { setDutyLocationId(e.target.value); clearError("dutyLocationId"); }}
-                    className="w-full h-11 border border-blue-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white text-sm">
-                    <option value="">Not assigned</option>
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.place_name}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={dutyLocationId}
+                    onChange={val => { setDutyLocationId(val); clearError("dutyLocationId"); }}
+                    options={[
+                      { value: "", label: "Not assigned" },
+                      ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
+                    ]}
+                    placeholder="Not assigned"
+                  />
                 </div>
 
                 <div>
                   <p className="text-sm font-bold text-blue-600 mb-1.5">⏰ Constant Shift Timing</p>
-                  <select value={shiftName} onChange={e => {
-                    setShiftName(e.target.value);
-                    const defaultTime = DEFAULT_TIMINGS[e.target.value];
-                    if (defaultTime) {
-                      setStartTime(defaultTime.startSimple);
-                      setEndTime(defaultTime.endSimple);
-                    }
-                  }}
-                    className="w-full h-11 border border-blue-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white text-sm mb-3">
-                    <option value="">Select Constant Shift</option>
-                    {SHIFT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <div className="grid grid-cols-2 gap-4">
+                  <CustomSelect
+                    value={shiftName}
+                    onChange={val => {
+                      setShiftName(val);
+                      const defaultTime = DEFAULT_TIMINGS[val];
+                      if (defaultTime) {
+                        setStartTime(defaultTime.startSimple);
+                        setEndTime(defaultTime.endSimple);
+                      }
+                    }}
+                    options={[
+                      { value: "", label: "Select Constant Shift" },
+                      ...SHIFT_OPTIONS.map(s => ({ value: s, label: s }))
+                    ]}
+                    placeholder="Select Constant Shift"
+                  />
+                  <div className="grid grid-cols-2 gap-4 mt-3">
                     <div>
                       <label className="text-xs text-blue-600 font-medium">Start Time</label>
                       <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
@@ -934,7 +1023,7 @@ function Guards({ onGuardAdded }) {
                 </button>
               )}
             </div>
-            
+
             <div className="flex gap-2">
               {currentStep < 3 ? (
                 <button type="button" onClick={() => {

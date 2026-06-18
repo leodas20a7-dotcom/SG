@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
+import CustomSelect from "./CustomSelect";
 
 function Users() {
   const [users, setUsers] = useState([]);
@@ -121,23 +122,32 @@ function Users() {
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">Role</label>
-              <select value={role} onChange={(e) => { setRole(e.target.value); setLinkedGuardId(""); }}
-                className="w-full h-12 border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-300 bg-white">
-                <option value="admin">Admin</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="guard">Guard</option>
-              </select>
+              <CustomSelect
+                value={role}
+                onChange={(val) => { setRole(val); setLinkedGuardId(""); }}
+                options={[
+                  { value: "admin", label: "Admin" },
+                  { value: "supervisor", label: "Supervisor" },
+                  { value: "guard", label: "Guard" }
+                ]}
+                placeholder="Select Role"
+                heightClass="h-12"
+              />
             </div>
             {role === "guard" && (
               <div>
                 <label className="block text-sm text-gray-500 mb-1">Link to Guard Record</label>
-                <select value={linkedGuardId} onChange={(e) => { setLinkedGuardId(e.target.value); clearError("linkedGuardId"); }}
-                  className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition bg-white ${errors.linkedGuardId ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-cyan-300"}`}>
-                  <option value="">Select Guard</option>
-                  {guards.filter((g) => !g.auth_user_id).map((g) => (
-                    <option key={g.id} value={g.id}>{g.name} — {g.site}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={linkedGuardId}
+                  onChange={val => { setLinkedGuardId(val); clearError("linkedGuardId"); }}
+                  options={[
+                    { value: "", label: "Select Guard" },
+                    ...guards.filter((g) => !g.auth_user_id).map((g) => ({ value: String(g.id), label: `${g.name} — ${g.site}` }))
+                  ]}
+                  placeholder="Select Guard"
+                  error={!!errors.linkedGuardId}
+                  heightClass="h-12"
+                />
                 {errors.linkedGuardId && <p className="text-red-500 text-sm mt-1">{errors.linkedGuardId}</p>}
               </div>
             )}

@@ -5,6 +5,7 @@ import {
   FaExclamationTriangle,
   FaFileAlt,
   FaGlobeAsia,
+  FaCog,
 } from "react-icons/fa";
 import { useLanguage } from "./LanguageContext";
 
@@ -17,6 +18,7 @@ const ALL_NAV = [
   { key: "incidents", label: "Incidents", icon: FaExclamationTriangle, roles: ["admin", "supervisor", "guard"] },
   { key: "circulars", label: "Circulars", icon: FaFileAlt, roles: ["admin", "supervisor", "guard"] },
   { key: "correction-requests", label: "Corrections", icon: FaClipboardCheck, roles: ["admin", "supervisor"] },
+  { key: "settings", label: "Settings", icon: FaCog, roles: ["admin"] },
 ];
 
 function Sidebar({ role, page, onNavigate, isOpen, onClose }) {

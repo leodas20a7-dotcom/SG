@@ -383,7 +383,6 @@ function Attendance({ role, userGuardId, hideHistory }) {
       setLoading(false);
       setGpsStatus(null);
     }
-    setShowCamera(false);
   }
 
   async function handleCheckOut() {

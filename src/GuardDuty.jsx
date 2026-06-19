@@ -863,7 +863,6 @@ function GuardDuty({ guardId, guardName }) {
   }
 
   async function onCameraCapture(dataUrl) {
-    setShowCamera(false);
     if (!dataUrl) { setError("Camera not available. Grant camera permission and try again."); setLoading(false); return; }
     setLoading(true);
     try {
@@ -945,7 +944,6 @@ function GuardDuty({ guardId, guardName }) {
   }
 
   async function onCheckoutCapture(dataUrl) {
-    setShowCamera(false);
     if (!dataUrl) { setError("Camera not available. Grant camera permission and try again."); setLoading(false); return; }
     setLoading(true);
     try {

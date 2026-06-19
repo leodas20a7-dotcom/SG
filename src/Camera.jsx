@@ -32,7 +32,19 @@ function Camera({ onCapture, onClose }) {
     if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
   }
 
-  function confirm() { onCapture(captured); onClose(); }
+  const [submitting, setSubmitting] = useState(false);
+
+  async function confirm() {
+    setSubmitting(true);
+    try {
+      await onCapture(captured);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+      onClose();
+    }
+  }
   function retake() { setCaptured(null); setReady(false); }
 
   return (
@@ -41,7 +53,7 @@ function Camera({ onCapture, onClose }) {
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-lg font-semibold text-gray-800">{captured ? "Preview" : "Take Selfie"}</h3>
           <button onClick={() => { if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); onClose(); }}
-            className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            className="text-gray-400 hover:text-gray-600 text-2xl" disabled={submitting}>&times;</button>
         </div>
         {captured ? (
           <img src={captured} alt="selfie" className="w-full rounded-lg" />
@@ -51,8 +63,21 @@ function Camera({ onCapture, onClose }) {
         <div className="flex justify-center gap-3 mt-4">
           {captured ? (
             <>
-              <button onClick={retake} className="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition">Retake</button>
-              <button onClick={confirm} className="px-5 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition">Use Photo</button>
+              <button onClick={retake} disabled={submitting} className="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition">Retake</button>
+              <button 
+                onClick={confirm} 
+                disabled={submitting}
+                className="px-5 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center justify-center gap-2 min-w-[120px]"
+              >
+                {submitting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Use Photo"
+                )}
+              </button>
             </>
           ) : (
             <>

@@ -70,11 +70,42 @@ function CorrectionRequests({ role, guardId }) {
   async function handleStatus(id, newStatus) {
     setLoading(true);
     try {
+      // 1. Fetch details to notify guard
+      const { data: reqData } = await supabase
+        .from("attendance_requests")
+        .select("guard_id, request_type, message, start_date, end_date")
+        .eq("id", id)
+        .single();
+
+      // 2. Update status
       const { error } = await supabase
         .from("attendance_requests")
         .update({ status: newStatus })
         .eq("id", id);
       if (error) throw error;
+
+      // 3. Insert notification for guard
+      if (reqData && reqData.guard_id) {
+        let title = "Request Update";
+        let message = `Your request has been ${newStatus.toLowerCase()}.`;
+        if (reqData.request_type === "leave") {
+          title = `🌴 Leave Request ${newStatus}`;
+          message = `Your leave request from ${reqData.start_date} to ${reqData.end_date} has been ${newStatus.toLowerCase()} by the administrator.`;
+        } else {
+          title = `📝 Correction Request ${newStatus}`;
+          message = `Your attendance correction request has been ${newStatus.toLowerCase()} by the administrator.`;
+        }
+
+        await supabase.from("notifications").insert([{
+          title,
+          message,
+          guard_id: reqData.guard_id,
+          is_broadcast: false,
+          type: newStatus === "Approved" ? "success" : "error",
+          user_role: "guard"
+        }]);
+      }
+
       showToast(`Request ${newStatus.toLowerCase()} successfully.`, "success");
       fetchRequests();
     } catch (err) {
@@ -150,12 +181,25 @@ function CorrectionRequests({ role, guardId }) {
                       {role === "admin" && <td className="p-4 font-medium">{req.guards?.name}</td>}
                       <td className="p-4">
                         <span className={`px-2 py-1 text-xs rounded-md font-semibold capitalize ${
+                          req.request_type === "leave" ? "bg-amber-100 text-amber-700" :
                           req.request_type === "voice" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
                         }`}>
-                          {req.request_type === "voice" ? "🎤 Voice" : "📝 Text"}
+                          {req.request_type === "leave" ? "🌴 Leave" :
+                           req.request_type === "voice" ? "🎤 Voice" : "📝 Text"}
                         </span>
                       </td>
-                      <td className="p-4 text-sm text-gray-700 max-w-xs truncate">{req.message || "—"}</td>
+                      <td className="p-4 text-sm text-gray-700 max-w-xs">
+                        {req.request_type === "leave" ? (
+                          <div>
+                            <p className="font-semibold text-amber-800">
+                              📅 {req.start_date} to {req.end_date}
+                            </p>
+                            <p className="text-xs text-gray-550 mt-0.5">{req.message || "No reason"}</p>
+                          </div>
+                        ) : (
+                          req.message || "—"
+                        )}
+                      </td>
                       <td className="p-4">
                         {req.audio_url ? (
                           <AudioPlayer src={req.audio_url} />
@@ -225,15 +269,26 @@ function CorrectionRequests({ role, guardId }) {
                     <div>
                       <span className="font-semibold block text-gray-400 text-[10px] uppercase">Type:</span>
                       <span className={`inline-block px-2 py-0.5 text-[10px] rounded font-semibold capitalize ${
+                        req.request_type === "leave" ? "bg-amber-100 text-amber-700" :
                         req.request_type === "voice" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
                       }`}>
-                        {req.request_type === "voice" ? "🎤 Voice Request" : "📝 Text Request"}
+                        {req.request_type === "leave" ? "🌴 Leave Request" :
+                         req.request_type === "voice" ? "🎤 Voice Request" : "📝 Text Request"}
                       </span>
                     </div>
 
                     <div>
                       <span className="font-semibold block text-gray-400 text-[10px] uppercase">Note / Details:</span>
-                      <p className="text-xs">{req.message || "—"}</p>
+                      {req.request_type === "leave" ? (
+                        <div className="space-y-1">
+                          <p className="font-semibold text-amber-800">
+                            📅 {req.start_date} to {req.end_date}
+                          </p>
+                          <p className="text-xs text-gray-600">{req.message || "No reason"}</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs">{req.message || "—"}</p>
+                      )}
                     </div>
 
                     <div>

@@ -380,6 +380,11 @@ function GuardDuty({ guardId, guardName }) {
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [dutyCompletePopup, setDutyCompletePopup] = useState(null);
   const [checkInSuccessPopup, setCheckInSuccessPopup] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveStart, setLeaveStart] = useState("");
+  const [leaveEnd, setLeaveEnd] = useState("");
+  const [leaveReason, setLeaveReason] = useState("");
+  const [isOnLeaveToday, setIsOnLeaveToday] = useState(false);
   const { showToast, ToastContainer } = useToast();
 
   function handleSosPanic() {
@@ -546,7 +551,9 @@ function GuardDuty({ guardId, guardName }) {
               message: message,
               audio_url: audioUploadUrl,
               status: "Pending",
-              created_at: timestamp
+              created_at: timestamp,
+              start_date: item.data.start_date || null,
+              end_date: item.data.end_date || null
             }]);
             if (insErr) throw insErr;
           } else if (item.type === "incident") {
@@ -824,7 +831,27 @@ function GuardDuty({ guardId, guardName }) {
     return () => clearInterval(id);
   }, [isOnDuty, dutyLocation]);
 
-  useEffect(() => { fetchAssignedLocation(); fetchTodayStatus(); fetchAttendanceHistory(); }, [guardId]);
+  async function fetchLeaveStatus() {
+    if (!guardId) return;
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const { data, error } = await supabase
+        .from("attendance_requests")
+        .select("id")
+        .eq("guard_id", guardId)
+        .eq("request_type", "leave")
+        .eq("status", "Approved")
+        .lte("start_date", today)
+        .gte("end_date", today);
+      
+      if (error) throw error;
+      setIsOnLeaveToday(data && data.length > 0);
+    } catch (err) {
+      console.error("Error fetching leave status:", err);
+    }
+  }
+
+  useEffect(() => { fetchAssignedLocation(); fetchTodayStatus(); fetchAttendanceHistory(); fetchLeaveStatus(); }, [guardId]);
   useEffect(() => { if (!isOnDuty) return; const id = setInterval(fetchTodayStatus, 15000); return () => clearInterval(id); }, [isOnDuty]);
 
   async function sendLiveLocation(attId) {
@@ -1114,6 +1141,66 @@ function GuardDuty({ guardId, guardName }) {
     setSubmitting(false);
   }
 
+  async function submitLeaveRequest(e) {
+    e.preventDefault();
+    if (!leaveReason.trim()) { setError("Please provide a reason for leave."); return; }
+    setSubmitting(true); setError("");
+    try {
+      const now = new Date().toISOString();
+      const formattedMessage = `Reason: ${leaveReason.trim()}`;
+
+      if (!navigator.onLine) {
+        await addToQueue("issue", {
+          guardId,
+          requestType: "leave",
+          message: formattedMessage,
+          audioBlob: null,
+          timestamp: now,
+          start_date: leaveStart,
+          end_date: leaveEnd
+        });
+
+        const cachedRequests = getCached(`my_requests_${guardId}`) || [];
+        const newRequestItem = {
+          id: "temp_req_" + Date.now(),
+          request_type: "leave",
+          message: formattedMessage,
+          audio_url: null,
+          status: "Pending",
+          created_at: now,
+          start_date: leaveStart,
+          end_date: leaveEnd
+        };
+        const updatedRequests = [newRequestItem, ...cachedRequests];
+        setCached(`my_requests_${guardId}`, updatedRequests);
+
+        setStatus("💾 Leave request saved offline! Will sync when connected.", "success");
+        setShowLeaveModal(false);
+        setTimeout(() => setGpsStatus(null), 3000);
+        setSubmitting(false);
+        return;
+      }
+
+      const { error: insErr } = await supabase.from("attendance_requests").insert([{
+        guard_id: guardId,
+        request_type: "leave",
+        message: formattedMessage,
+        audio_url: null,
+        status: "Pending",
+        created_at: now,
+        start_date: leaveStart,
+        end_date: leaveEnd
+      }]);
+      if (insErr) throw insErr;
+      
+      setStatus("✅ Leave request submitted successfully.", "success");
+      setShowLeaveModal(false);
+      fetchLeaveStatus();
+      setTimeout(() => setGpsStatus(null), 3000);
+    } catch (err) { setError(err.message); }
+    setSubmitting(false);
+  }
+
   async function handleLogout() { stopLiveTracking(); await supabase.auth.signOut(); window.location.reload(); }
 
   const statusColour = gpsType === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-700"
@@ -1123,6 +1210,15 @@ function GuardDuty({ guardId, guardName }) {
   /* ─── Duty Control panel (shared between mobile & desktop) ─── */
   const dutyPanel = (
     <div className="space-y-4">
+      {isOnLeaveToday && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-3">
+          <span className="text-2xl">🌴</span>
+          <div>
+            <p className="font-bold">On Approved Leave Today</p>
+            <p className="text-xs opacity-80">Check-in is disabled during your approved leave days.</p>
+          </div>
+        </div>
+      )}
 
       {/* Primary status card */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1173,9 +1269,10 @@ function GuardDuty({ guardId, guardName }) {
           )}
 
           <button
-            onClick={isOnDuty ? handleCheckOut : handleCheckIn}
-            disabled={loading || (!dutyLocation && !isOnDuty)}
+            onClick={isOnLeaveToday ? null : (isOnDuty ? handleCheckOut : handleCheckIn)}
+            disabled={loading || (!dutyLocation && !isOnDuty) || isOnLeaveToday}
             className={`w-full h-14 rounded-2xl text-white font-bold text-base transition-all shadow-md active:scale-[0.98] ${loading ? "bg-gray-300 cursor-not-allowed" :
+              isOnLeaveToday ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200" :
               isOnDuty ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-200" :
                 "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-200"
               }`}
@@ -1185,7 +1282,7 @@ function GuardDuty({ guardId, guardName }) {
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 {t("submitting")}
               </span>
-            ) : isOnDuty ? "📸  " + t("end_duty") : "📍  " + t("start_duty")}
+            ) : isOnLeaveToday ? "🌴 " + t("on_approved_leave", "On Approved Leave") : isOnDuty ? "📸  " + t("end_duty") : "📍  " + t("start_duty")}
           </button>
         </div>
       </div>
@@ -1238,15 +1335,29 @@ function GuardDuty({ guardId, guardName }) {
           <h2 className="font-bold text-gray-800 text-lg">{t("attendance_history")}</h2>
           <p className="text-xs text-gray-400 mt-0.5">{attendanceHistory.length} {t("records_found")}</p>
         </div>
-        <button
-          onClick={() => {
-            setIssueDate(new Date().toISOString().split("T")[0]);
-            setShowReportModal(true);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
-        >
-          💬 {t("report_issue")}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setIssueDate(new Date().toISOString().split("T")[0]);
+              setShowReportModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
+          >
+            💬 {t("report_issue")}
+          </button>
+          <button
+            onClick={() => {
+              setLeaveStart(new Date().toISOString().split("T")[0]);
+              setLeaveEnd(new Date().toISOString().split("T")[0]);
+              setLeaveReason("");
+              setShowLeaveModal(false);
+              setShowLeaveModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl text-xs font-bold transition"
+          >
+            🌴 Request Leave
+          </button>
+        </div>
       </div>
       <div className="divide-y divide-gray-50 max-h-[60vh] overflow-y-auto">
         {attendanceHistory.length === 0 ? (
@@ -1361,6 +1472,74 @@ function GuardDuty({ guardId, guardName }) {
           onSosPanic={handleSosPanic}
           sendingSos={sendingSos}
         />
+      )}
+
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-gray-150 animate-scale-in">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800">🌴 Request Leave</h3>
+              <button onClick={() => setShowLeaveModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            
+            <form onSubmit={submitLeaveRequest} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={leaveStart}
+                    onChange={(e) => setLeaveStart(e.target.value)}
+                    required
+                    className="w-full h-10 border border-gray-200 p-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-350 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={leaveEnd}
+                    min={leaveStart}
+                    onChange={(e) => setLeaveEnd(e.target.value)}
+                    required
+                    className="w-full h-10 border border-gray-200 p-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-350 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Reason for Leave</label>
+                <textarea
+                  value={leaveReason}
+                  onChange={(e) => setLeaveReason(e.target.value)}
+                  placeholder="Enter reason..."
+                  required
+                  rows={3}
+                  className="w-full border border-gray-200 p-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-355 bg-white resize-none"
+                />
+              </div>
+
+              {error && <p className="text-red-500 text-xs">{error}</p>}
+
+              <div className="flex gap-2 justify-end pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveModal(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition text-sm font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition text-sm font-bold shadow-md shadow-amber-200"
+                >
+                  {submitting ? "Sending..." : "Submit Request"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* ╔════════════════════════════════╗

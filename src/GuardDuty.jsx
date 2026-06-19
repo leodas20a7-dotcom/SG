@@ -379,6 +379,7 @@ function GuardDuty({ guardId, guardName }) {
   const [sendingSos, setSendingSos] = useState(false);
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [dutyCompletePopup, setDutyCompletePopup] = useState(null);
+  const [checkInSuccessPopup, setCheckInSuccessPopup] = useState(false);
   const { showToast, ToastContainer } = useToast();
 
   function handleSosPanic() {
@@ -866,6 +867,7 @@ function GuardDuty({ guardId, guardName }) {
     if (!dataUrl) { setError("Camera not available. Grant camera permission and try again."); setLoading(false); return; }
     setLoading(true);
     try {
+      setStatus("📸 Uploading check-in photo...", "info");
       if (!navigator.onLine) {
         const tempId = "temp_" + Date.now();
         const now = new Date().toISOString();
@@ -901,13 +903,12 @@ function GuardDuty({ guardId, guardName }) {
           onDutySince: now
         });
 
-        setStatus("💾 Check-in saved offline! Will sync when connected.", "success");
-        setTimeout(() => setGpsStatus(null), 3000);
+        setCheckInSuccessPopup(true);
+        setTimeout(() => setCheckInSuccessPopup(false), 3000);
         setLoading(false);
         return;
       }
 
-      setStatus("📸 Uploading photo...", "info");
       const photoUrl = await uploadPhoto(guardId, dataUrl, supabase);
       const now = new Date().toISOString();
       const pos = await getLocation();
@@ -918,11 +919,11 @@ function GuardDuty({ guardId, guardName }) {
       }]).select();
       if (err) { setError("Error marking attendance."); setLoading(false); return; }
       setIsOnDuty(true); setCurrentAttendanceId(data[0].id); setOnDutySince(now);
-      setStatus("✅ Check-in successful! Tracking started.", "success");
       startLiveTracking(data[0].id);
       await fetchTodayStatus();
       await fetchAttendanceHistory();
-      setTimeout(() => setGpsStatus(null), 3000);
+      setCheckInSuccessPopup(true);
+      setTimeout(() => setCheckInSuccessPopup(false), 3000);
     } catch (err) { setError(err.message); }
     setLoading(false);
   }
@@ -1331,6 +1332,19 @@ function GuardDuty({ guardId, guardName }) {
             <h3 className="text-xl font-bold text-gray-800 mb-2">Duty Completed Today</h3>
             <p className="text-sm text-gray-500">
               You checked out at <strong className="text-gray-700">{fmt(dutyCompletePopup)}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
+      {checkInSuccessPopup && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-150 text-center animate-scale-in">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">
+              🟢
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Check-in Successful!</h3>
+            <p className="text-sm text-gray-500">
+              Your duty has started. Live tracking is active.
             </p>
           </div>
         </div>

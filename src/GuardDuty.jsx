@@ -914,7 +914,8 @@ function GuardDuty({ guardId, guardName }) {
       setIsOnDuty(true); setCurrentAttendanceId(data[0].id); setOnDutySince(now);
       setStatus("✅ Check-in successful! Tracking started.", "success");
       startLiveTracking(data[0].id);
-      fetchTodayStatus(); fetchAttendanceHistory();
+      await fetchTodayStatus();
+      await fetchAttendanceHistory();
       setTimeout(() => setGpsStatus(null), 3000);
     } catch (err) { setError(err.message); }
     setLoading(false);
@@ -1010,7 +1011,8 @@ function GuardDuty({ guardId, guardName }) {
       stopLiveTracking();
       setIsOnDuty(false); setCurrentAttendanceId(null); setOnDutySince(null);
       setStatus("✅ Checked out! Stay safe.", "success");
-      fetchTodayStatus(); fetchAttendanceHistory();
+      await fetchTodayStatus();
+      await fetchAttendanceHistory();
       setTimeout(() => setGpsStatus(null), 3000);
     } catch (err) { setError(err.message); }
     setLoading(false);

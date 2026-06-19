@@ -294,7 +294,10 @@ function Attendance({ role, userGuardId, hideHistory }) {
       if (record.check_in_photo) await deleteFileFromStorage(record.check_in_photo);
       if (record.check_out_photo) await deleteFileFromStorage(record.check_out_photo);
 
-      // 2. Delete database record
+      // 2. Delete associated live tracking entries
+      await supabase.from("live_tracking").delete().eq("attendance_id", id);
+
+      // 3. Delete database record
       const { error } = await supabase.from("attendance").delete().eq("id", id);
       if (error) throw error;
 

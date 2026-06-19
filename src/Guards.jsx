@@ -583,13 +583,15 @@ function Guards({ onGuardAdded }) {
       // Get auth user id to delete profile later
       const { data: guardData } = await supabase.from("guards").select("auth_user_id").eq("id", id).maybeSingle();
 
-      // Delete all related records first
+      // Delete live tracking first due to foreign key constraints on attendance
+      await supabase.from("live_tracking").delete().eq("guard_id", id);
+
+      // Delete other related records
       await Promise.all([
         supabase.from("attendance").delete().eq("guard_id", id),
         supabase.from("circulars").delete().eq("guard_id", id),
         supabase.from("incidents").delete().eq("guard_id", id),
         supabase.from("shifts").delete().eq("guard_id", id),
-        supabase.from("live_tracking").delete().eq("guard_id", id),
         supabase.from("notifications").delete().eq("guard_id", id),
         supabase.from("attendance_requests").delete().eq("guard_id", id),
       ]);

@@ -49,7 +49,7 @@ function CustomSelect({ value, onChange, options, placeholder = "Select option",
 
       {/* Dropdown Options List */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-y-auto max-h-60 z-[100] py-1">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-y-auto max-h-60 z-[1001] py-1">
           {options.map((opt) => {
             const isSelected = String(opt.value) === String(value);
             return (

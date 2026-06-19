@@ -169,20 +169,61 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
     await query;
   };
 
-  const handleNotificationClick = (notif) => {
+  const handleNotificationClick = async (notif) => {
     if (onNavigate) {
-      if (notif.title === "New Issue Reported") onNavigate("correction-requests");
-      else if (notif.title === "New Incident Reported") onNavigate("incidents");
-      else if (notif.title === "Request Updated" || (notif.title && notif.title.includes("Request Update"))) {
-        if (notif.message && notif.message.toLowerCase().includes("leave")) {
+      if (notif.title === "New Issue Reported") {
+        onNavigate("correction-requests");
+      } else if (notif.title === "New Incident Reported") {
+        onNavigate("incidents");
+      } else if (
+        notif.title === "Request Updated" || 
+        (notif.title && notif.title.includes("Request Update")) ||
+        (notif.title && notif.title.includes("Leave Request")) ||
+        (notif.title && notif.title.includes("Correction Request"))
+      ) {
+        let resolvedType = null;
+        try {
+          const { data } = await supabase
+            .from("attendance_requests")
+            .select("request_type, status")
+            .eq("guard_id", guardId)
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (data && data.length > 0) {
+            const isRejected = notif.message && notif.message.toLowerCase().includes("rejected");
+            const isApproved = notif.message && notif.message.toLowerCase().includes("approved");
+            const targetStatus = isRejected ? "Rejected" : isApproved ? "Approved" : null;
+
+            let match = null;
+            if (targetStatus) {
+              match = data.find(r => r.status === targetStatus);
+            }
+            if (!match) {
+              match = data[0];
+            }
+            resolvedType = match.request_type;
+          }
+        } catch (err) {
+          console.error("Error determining request type:", err);
+        }
+
+        if (resolvedType === "leave") {
           onNavigate("leave-history");
+        } else if (resolvedType === "text" || resolvedType === "voice") {
+          onNavigate("correction-history");
         } else {
-          onNavigate("history");
+          // Fallback to message parsing
+          if (notif.message && notif.message.toLowerCase().includes("leave")) {
+            onNavigate("leave-history");
+          } else {
+            onNavigate("correction-history");
+          }
         }
       }
       else if (notif.title === "New Circular") onNavigate("circulars");
       else if (notif.title && notif.title.includes("Leave Request")) onNavigate("leave-history");
-      else if (notif.title && notif.title.includes("Correction Request")) onNavigate("history");
+      else if (notif.title && notif.title.includes("Correction Request")) onNavigate("correction-history");
     }
     setIsOpen(false);
   };

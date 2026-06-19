@@ -80,6 +80,7 @@ function Analytics({ role }) {
   const [selectedPatrolDate, setSelectedPatrolDate] = useState(new Date().toISOString().split("T")[0]);
   const [patrolCoords, setPatrolCoords] = useState([]);
   const [mapCenter, setMapCenter] = useState(null);
+  const [selectedGuardLocation, setSelectedGuardLocation] = useState(null);
 
   // Attendance Tab States
   const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -224,7 +225,7 @@ function Analytics({ role }) {
       // Fetch guard's location details
       const { data: guardData } = await supabase
         .from("guards")
-        .select("*, duty_locations(latitude, longitude, radius_meters, place_name)")
+        .select("*, duty_locations!duty_location_id(latitude, longitude, radius_meters, place_name)")
         .eq("id", selectedPatrolGuard)
         .maybeSingle();
       setSelectedGuardLocation(guardData?.duty_locations || null);

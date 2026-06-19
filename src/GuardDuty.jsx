@@ -878,6 +878,10 @@ function GuardDuty({ guardId, guardName }) {
       setShowLeaveHistory(true);
       fetchLeaveHistory();
       setShowLeaveModal(true);
+    } else if (tab === "correction-history") {
+      setActiveTab("history");
+      setShowRequestHistory(true);
+      setShowReportModal(true);
     } else {
       setActiveTab(tab);
     }

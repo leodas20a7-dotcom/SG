@@ -378,6 +378,7 @@ function GuardDuty({ guardId, guardName }) {
   const [loading, setLoading] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
   const [showSosConfirm, setShowSosConfirm] = useState(false);
+  const [dutyCompletePopup, setDutyCompletePopup] = useState(null);
   const { showToast, ToastContainer } = useToast();
 
   function handleSosPanic() {
@@ -838,6 +839,11 @@ function GuardDuty({ guardId, guardName }) {
   function setStatus(msg, type = "info") { setGpsStatus(msg); setGpsType(type); }
 
   async function handleCheckIn() {
+    if (todayRecord && todayRecord.check_out_time) {
+      setDutyCompletePopup(todayRecord.check_out_time);
+      setTimeout(() => setDutyCompletePopup(null), 3000);
+      return;
+    }
     if (!dutyLocation) { setError("No duty location assigned. Contact admin."); return; }
     setError(""); setLoading(true);
     try {
@@ -1013,6 +1019,8 @@ function GuardDuty({ guardId, guardName }) {
       setStatus("✅ Checked out! Stay safe.", "success");
       await fetchTodayStatus();
       await fetchAttendanceHistory();
+      setDutyCompletePopup(now);
+      setTimeout(() => setDutyCompletePopup(null), 3000);
       setTimeout(() => setGpsStatus(null), 3000);
     } catch (err) { setError(err.message); }
     setLoading(false);
@@ -1116,15 +1124,6 @@ function GuardDuty({ guardId, guardName }) {
   /* ─── Duty Control panel (shared between mobile & desktop) ─── */
   const dutyPanel = (
     <div className="space-y-4">
-      {todayRecord && !isOnDuty && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-3">
-          <span className="text-2xl">✅</span>
-          <div>
-            <p className="font-bold">Duty completed today</p>
-            <p className="text-xs opacity-80">Checked out at {fmt(todayRecord.check_out_time)}</p>
-          </div>
-        </div>
-      )}
 
       {/* Primary status card */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1176,10 +1175,9 @@ function GuardDuty({ guardId, guardName }) {
 
           <button
             onClick={isOnDuty ? handleCheckOut : handleCheckIn}
-            disabled={loading || (!dutyLocation && !isOnDuty) || (todayRecord && todayRecord.check_out_time)}
+            disabled={loading || (!dutyLocation && !isOnDuty)}
             className={`w-full h-14 rounded-2xl text-white font-bold text-base transition-all shadow-md active:scale-[0.98] ${loading ? "bg-gray-300 cursor-not-allowed" :
               isOnDuty ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-200" :
-                (todayRecord && todayRecord.check_out_time) ? "bg-gray-400 cursor-not-allowed" :
                 "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-200"
               }`}
           >
@@ -1188,7 +1186,7 @@ function GuardDuty({ guardId, guardName }) {
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 {t("submitting")}
               </span>
-            ) : isOnDuty ? "📸  " + t("end_duty") : (todayRecord && todayRecord.check_out_time) ? "✅  " + t("duty_complete") : "📍  " + t("start_duty")}
+            ) : isOnDuty ? "📸  " + t("end_duty") : "📍  " + t("start_duty")}
           </button>
         </div>
       </div>
@@ -1324,6 +1322,19 @@ function GuardDuty({ guardId, guardName }) {
     <>
       <ToastContainer />
       {loading && <LoadingOverlay message={gpsStatus || "Processing your request..."} />}
+      {dutyCompletePopup && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-150 text-center animate-scale-in">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">
+              ✅
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Duty Completed Today</h3>
+            <p className="text-sm text-gray-500">
+              You checked out at <strong className="text-gray-700">{fmt(dutyCompletePopup)}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
       {showCamera && (
         <Camera
           onCapture={cameraMode === "checkin" ? onCameraCapture : onCheckoutCapture}

@@ -167,8 +167,8 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
                     onClose();
                   }}
                   className={`cursor-pointer px-4.5 py-3.5 rounded-xl transition-all duration-300 flex items-center gap-3.5 ${isActive
-                      ? "bg-gradient-to-r from-blue-650 to-indigo-650 text-white shadow-lg shadow-blue-500/20 font-bold"
-                      : "text-slate-650 hover:text-slate-900 hover:bg-slate-50 font-semibold"
+                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 font-bold"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-semibold"
                     }`}
                 >
                   <Icon className={`text-lg transition-transform duration-350 ${isActive ? "text-white scale-110" : "text-blue-500"}`} />

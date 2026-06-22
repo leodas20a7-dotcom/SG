@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 function Toast({ message, type = "success", onClose }) {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, []);
 
   const colors = {
     success: "bg-green-500",
@@ -34,7 +34,7 @@ export function useToast() {
     setToast({ message, type });
   }
 
-  function ToastContainer() {
+  const ToastContainer = useCallback(() => {
     if (!toast) return null;
     return (
       <Toast
@@ -43,7 +43,7 @@ export function useToast() {
         onClose={() => setToast(null)}
       />
     );
-  }
+  }, [toast]);
 
   return { showToast, ToastContainer };
 }

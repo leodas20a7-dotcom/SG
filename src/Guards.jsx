@@ -874,11 +874,12 @@ function Guards({ onGuardAdded, onNavigate }) {
                 ) : (
                   <>
                     <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPlus className="text-sm" /></span>
-                    <span>Add New Guard & Profile Login</span>
+                    <span className="hidden md:inline">Add New Guard & Profile Login</span>
+                    <span className="md:hidden">Add Guard</span>
                   </>
                 )}
               </h2>
-              <p className="text-xs text-slate-450 mt-1 font-medium">Onboard, coordinate, and establish system credentials for guards.</p>
+              <p className="hidden md:block text-xs text-slate-450 mt-1 font-medium">Onboard, coordinate, and establish system credentials for guards.</p>
             </div>
             {editingId ? (
               <span className="text-[10px] font-bold uppercase tracking-widest bg-blue-100 text-blue-800 px-3 py-1 rounded-full">

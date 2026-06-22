@@ -129,10 +129,10 @@ function LanguageDropdown({ locale, setLocale, isMobile = false }) {
 }
 
 const TABS = [
-  { key: "duty", label: "Shift Control", icon: <FaMapMarkerAlt />, desc: "Check In / Out" },
-  { key: "history", label: "Attendance", icon: <FaClipboardList />, desc: "Your History" },
-  { key: "incidents", label: "Incidents", icon: <FaBell />, desc: "Report Incidents" },
-  { key: "circulars", label: "Circulars", icon: <FaBullhorn />, desc: "Announcements" },
+  { key: "duty", label: "Shift Control", mobileLabel: "Shift", icon: <FaMapMarkerAlt />, desc: "Check In / Out" },
+  { key: "history", label: "Attendance", mobileLabel: "History", icon: <FaClipboardList />, desc: "Your History" },
+  { key: "incidents", label: "Incidents", mobileLabel: "Issues", icon: <FaBell />, desc: "Report Incidents" },
+  { key: "circulars", label: "Circulars", mobileLabel: "News", icon: <FaBullhorn />, desc: "Announcements" },
 ];/* ─── Circular feed (read-only) ─── */
 function CircularFeed({ guardId, guardName }) {
   const [items, setItems] = useState([]);
@@ -1382,7 +1382,8 @@ function GuardDuty({ guardId, guardName }) {
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
           >
-            💬 {t("report_issue")}
+            <span className="hidden sm:inline">{t("report_issue")}</span>
+            <span className="sm:hidden">Report</span>
           </button>
           <button
             onClick={() => {
@@ -1395,7 +1396,8 @@ function GuardDuty({ guardId, guardName }) {
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl text-xs font-bold transition"
           >
-            🌴 Request Leave
+            <span className="hidden sm:inline">Request Leave</span>
+            <span className="sm:hidden">Leave</span>
           </button>
         </div>
       </div>
@@ -1665,26 +1667,23 @@ function GuardDuty({ guardId, guardName }) {
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-white/60 shadow-sm safe-top">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center bg-white shadow-sm shrink-0">
-                <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover" />
-              </div>
+              <button 
+                onClick={() => setShowProfile(true)}
+                className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-sm hover:bg-blue-100 transition shrink-0"
+                title="Profile & Documents"
+              >
+                <FaUser />
+              </button>
               <div>
                 <p className="font-bold text-gray-800 text-sm">{guardName || "Guard"}</p>
                 {isOnDuty && elapsedTime && (
-                  <p className="text-xs font-mono text-emerald-600 font-bold">{elapsedTime}</p>
+                  <p className="text-xs font-mono text-blue-600 font-bold">{elapsedTime}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2">
               {/* 🌐 Language Selector */}
               <LanguageDropdown locale={locale} setLocale={setLocale} isMobile={true} />
-              <button 
-                onClick={() => setShowProfile(true)}
-                className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-sm hover:bg-blue-100 transition"
-                title="Profile & Documents"
-              >
-                👤
-              </button>
               {isOnDuty && (
                 <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-semibold">
                   <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> Live
@@ -1696,7 +1695,7 @@ function GuardDuty({ guardId, guardName }) {
                 className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center text-sm shadow-sm hover:bg-red-100 transition shrink-0"
                 title={t("logout")}
               >
-                🚪
+                <FaSignOutAlt />
               </button>
             </div>
           </div>

@@ -64,34 +64,34 @@ function GuardProfiles() {
 
       {/* Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="glass-card !mb-0 p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl">👥</div>
+        <div className="glass-card !mb-0 p-5 flex items-center gap-4 border border-slate-100">
+          <div className="w-11 h-11 rounded-xl bg-blue-50/60 text-blue-600 flex items-center justify-center text-lg border border-blue-100/50 shadow-sm">👥</div>
           <div>
-            <p className="text-sm text-gray-500 font-semibold">Total Guards</p>
-            <p className="text-2xl font-bold text-gray-800">{total}</p>
+            <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Total Guards</p>
+            <p className="text-2xl font-extrabold text-slate-800 mt-0.5">{total}</p>
           </div>
         </div>
-        <div className="glass-card !mb-0 p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">✅</div>
+        <div className="glass-card !mb-0 p-5 flex items-center gap-4 border border-slate-100">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50/60 text-emerald-600 flex items-center justify-center text-lg border border-emerald-100/50 shadow-sm">✅</div>
           <div>
-            <p className="text-sm text-gray-500 font-semibold">Fully Verified</p>
-            <p className="text-2xl font-bold text-emerald-600">{fullyVerified}</p>
+            <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Fully Verified</p>
+            <p className="text-2xl font-extrabold text-emerald-600 mt-0.5">{fullyVerified}</p>
           </div>
         </div>
-        <div className="glass-card !mb-0 p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl">⏳</div>
+        <div className="glass-card !mb-0 p-5 flex items-center gap-4 border border-slate-100">
+          <div className="w-11 h-11 rounded-xl bg-amber-50/60 text-amber-600 flex items-center justify-center text-lg border border-amber-100/50 shadow-sm">⏳</div>
           <div>
-            <p className="text-sm text-gray-500 font-semibold">Pending Docs</p>
-            <p className="text-2xl font-bold text-amber-600">{pending}</p>
+            <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Pending Docs</p>
+            <p className="text-2xl font-extrabold text-amber-600 mt-0.5">{pending}</p>
           </div>
         </div>
       </div>
 
       {/* Table */}
       <div className="glass-card overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-          <h2 className="font-bold text-gray-800 text-lg">Staff Directory</h2>
-          <button onClick={fetchGuards} className="text-sm text-blue-600 font-semibold hover:underline">Refresh</button>
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-gray-50/30">
+          <h2 className="font-bold text-gray-805 text-base">Staff Directory</h2>
+          <button onClick={fetchGuards} className="text-xs text-blue-600 font-bold hover:underline">Refresh</button>
         </div>
         
         {loading ? (
@@ -101,11 +101,11 @@ function GuardProfiles() {
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-white border-b border-gray-100">
-                  <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Guard</th>
-                  <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Sec. Licence</th>
-                  <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Dr. Licence</th>
-                  <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-center">Certificates</th>
-                  <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="p-4 text-[10px] font-bold text-slate-450 uppercase tracking-wider">Guard</th>
+                  <th className="p-4 text-[10px] font-bold text-slate-450 uppercase tracking-wider text-center">Sec. Licence</th>
+                  <th className="p-4 text-[10px] font-bold text-slate-450 uppercase tracking-wider text-center">Dr. Licence</th>
+                  <th className="p-4 text-[10px] font-bold text-slate-450 uppercase tracking-wider text-center">Certificates</th>
+                  <th className="p-4 text-[10px] font-bold text-slate-450 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -125,27 +125,27 @@ function GuardProfiles() {
                     >
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
                             {g.profile_picture ? (
                               <img src={g.profile_picture} alt={g.name} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-gray-400 text-lg">👤</span>
+                              <span className="text-gray-450 text-base">👤</span>
                             )}
                           </div>
                           <div>
-                            <p className="font-bold text-gray-800 group-hover:text-blue-600 transition">{g.name}</p>
-                            <p className="text-xs text-gray-400 font-mono">{g.phone || "No phone"}</p>
+                            <p className="text-sm font-bold text-gray-800 group-hover:text-blue-600 transition">{g.name}</p>
+                            <p className="text-[11px] text-gray-450 font-mono">{g.phone || "No phone"}</p>
                           </div>
                         </div>
                       </td>
                       <td className="p-4 text-center">
-                        {hasSec ? <span className="text-emerald-500 bg-emerald-50 w-8 h-8 rounded-full inline-flex items-center justify-center">✅</span> : <span className="text-red-400 text-xs font-bold">Pending</span>}
+                        {hasSec ? <span className="text-emerald-500 bg-emerald-50 w-7 h-7 rounded-full inline-flex items-center justify-center text-xs">✅</span> : <span className="text-red-400 text-[11px] font-bold">Pending</span>}
                       </td>
                       <td className="p-4 text-center">
-                        {g.doc_driving_licence ? <span className="text-emerald-500 bg-emerald-50 w-8 h-8 rounded-full inline-flex items-center justify-center">✅</span> : <span className="text-gray-300 text-xs">—</span>}
+                        {g.doc_driving_licence ? <span className="text-emerald-500 bg-emerald-50 w-7 h-7 rounded-full inline-flex items-center justify-center text-xs">✅</span> : <span className="text-gray-300 text-[11px]">—</span>}
                       </td>
                       <td className="p-4 text-center">
-                        {g.doc_certificates ? <span className="text-emerald-500 bg-emerald-50 w-8 h-8 rounded-full inline-flex items-center justify-center">✅</span> : <span className="text-gray-300 text-xs">—</span>}
+                        {g.doc_certificates ? <span className="text-emerald-500 bg-emerald-50 w-7 h-7 rounded-full inline-flex items-center justify-center text-xs">✅</span> : <span className="text-gray-300 text-[11px]">—</span>}
                       </td>
                       <td className="p-4">
                         <span className={`status-chip ${isVerified ? "status-chip-approved" : "status-chip-pending"}`}>

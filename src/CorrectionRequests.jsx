@@ -159,13 +159,13 @@ function CorrectionRequests({ role, guardId }) {
             <table className="w-full border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 border-b">
-                  {role === "admin" && <th className="text-left p-4 text-gray-600 font-semibold">Guard</th>}
-                  <th className="text-left p-4 text-gray-600 font-semibold">Type</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Details / Note</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Voice Request</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Status</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Submitted</th>
-                  {role === "admin" && <th className="text-left p-4 text-gray-600 font-semibold">Actions</th>}
+                  {role === "admin" && <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Guard</th>}
+                  <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Type</th>
+                  <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Details / Note</th>
+                  <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Voice Request</th>
+                  <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Status</th>
+                  <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Submitted</th>
+                  {role === "admin" && <th className="text-left p-4 text-slate-450 font-bold text-[10px] uppercase tracking-wider">Actions</th>}
                 </tr>
               </thead>
               <tbody>

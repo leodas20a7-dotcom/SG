@@ -7,6 +7,7 @@ import L from "leaflet";
 import { getLocation } from "./lib/geoUtils";
 import LoadingOverlay from "./LoadingOverlay";
 import { getGeofencePolygonPoints } from "./MapView";
+import { FaMapMarkerAlt, FaCompass, FaCrosshairs, FaCheck, FaTimes, FaSearch, FaPen, FaTrashAlt, FaPlus } from "react-icons/fa";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -320,69 +321,117 @@ function DutyLocations() {
         </div>
       )}
       <div className="mt-4">
-        <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-emerald-200">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700 font-bold">
-            {editingId ? "✏️ Edit Shift Location" : "📍 Add Shift Location"}
+        <div className={`glass-card rounded-3xl p-6 md:p-8 mb-8 transition-all duration-300 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)] ${
+          editingId ? "ring-2 ring-blue-500/20 bg-blue-50/10" : "ring-1 ring-slate-200/50 bg-white/70"
+        }`}>
+          <h2 className="text-xl font-extrabold mb-6 text-slate-800 tracking-tight flex items-center gap-2">
+            {editingId ? (
+              <>
+                <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPen className="text-sm" /></span>
+                <span>Edit Shift Location</span>
+              </>
+            ) : (
+              <>
+                <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600"><FaMapMarkerAlt className="text-sm" /></span>
+                <span>Add Shift Location</span>
+              </>
+            )}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Place Name</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Place Name</label>
               <input type="text" placeholder="e.g. Koyambedu" value={placeName}
                 onChange={(e) => { setPlaceName(e.target.value); setErrors((p) => ({ ...p, placeName: "" })); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.placeName ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-emerald-300"}`} />
-              {errors.placeName && <p className="text-red-500 text-sm mt-1">{errors.placeName}</p>}
+                className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-slate-50/50 hover:bg-slate-50 focus:bg-white ${
+                  errors.placeName ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" : "border-slate-200 focus:ring-emerald-500/10 focus:border-emerald-600"
+                }`} />
+              {errors.placeName && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.placeName}</p>}
             </div>
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Latitude</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Latitude</label>
               <div className="flex gap-2">
                 <input type="text" placeholder="-33.8688" value={latitude}
                   onChange={(e) => handleLocationInput(e.target.value, true)}
-                  className={`flex-1 w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.latitude ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-emerald-300"}`} />
-                <button onClick={() => { setMapLat(latitude || "-33.8688"); setMapLng(longitude || "151.2093"); setShowMap(true); }} className="h-12 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm whitespace-nowrap">🗺️ Pick on Map</button>
+                  className={`flex-1 w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-slate-50/50 hover:bg-slate-50 focus:bg-white ${
+                    errors.latitude ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" : "border-slate-200 focus:ring-emerald-500/10 focus:border-emerald-600"
+                  }`} />
+                <button onClick={() => { setMapLat(latitude || "-33.8688"); setMapLng(longitude || "151.2093"); setShowMap(true); }} 
+                  className="h-11 px-4 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl transition text-xs font-bold whitespace-nowrap flex items-center gap-1.5 border border-blue-200/50">
+                  <FaCompass className="text-xs" />
+                  <span>Pick on Map</span>
+                </button>
               </div>
-              {errors.latitude && <p className="text-red-500 text-sm mt-1">{errors.latitude}</p>}
+              {errors.latitude && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.latitude}</p>}
             </div>
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Longitude</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Longitude</label>
               <input type="text" placeholder="80.2707" value={longitude}
                 onChange={(e) => handleLocationInput(e.target.value, false)}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.longitude ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-emerald-300"}`} />
-              {errors.longitude && <p className="text-red-500 text-sm mt-1">{errors.longitude}</p>}
+                className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-slate-50/50 hover:bg-slate-50 focus:bg-white ${
+                  errors.longitude ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" : "border-slate-200 focus:ring-emerald-500/10 focus:border-emerald-600"
+                }`} />
+              {errors.longitude && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.longitude}</p>}
               <button 
                 onClick={getCurrentLocation}
                 disabled={locLoading}
-                className="mt-2 text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-2.5 text-xs text-blue-655 hover:text-blue-700 font-bold flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition hover:underline"
               >
                 {locLoading ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-3.5 w-3.5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span>Getting Location...</span>
                   </>
                 ) : (
-                  <>📍 Use My Location</>
+                  <>
+                    <FaCrosshairs className="text-xs text-blue-650" />
+                    <span>Use My Location</span>
+                  </>
                 )}
               </button>
             </div>
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Radius (meters)</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Radius (meters)</label>
               <input type="number" min="10" placeholder="100" value={radius}
                 onChange={(e) => { setRadius(e.target.value); setErrors((p) => ({ ...p, radius: "" })); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.radius ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-emerald-300"}`} />
-              {errors.radius && <p className="text-red-500 text-sm mt-1">{errors.radius}</p>}
+                className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-slate-50/50 hover:bg-slate-50 focus:bg-white ${
+                  errors.radius ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" : "border-slate-200 focus:ring-emerald-500/10 focus:border-emerald-600"
+                }`} />
+              {errors.radius && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.radius}</p>}
             </div>
           </div>
-          <div className="flex gap-3 mt-5">
+          <div className="flex gap-3 mt-6 pt-5 border-t border-slate-150">
             <button onClick={saveLocation} disabled={loading}
-              className={`px-6 py-3 rounded-lg text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-              {loading ? "Saving..." : editingId ? "Update Location" : "Add Location"}
+              className={`px-5 py-2.5 rounded-xl text-white font-bold text-xs transition-all duration-300 shadow-md flex items-center gap-1.5 ${
+                loading 
+                  ? "bg-slate-350 cursor-not-allowed" 
+                  : editingId 
+                    ? "bg-blue-600 hover:bg-blue-700 shadow-blue-150" 
+                    : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-150"
+              }`}>
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <FaCheck className="text-xs" />
+                  <span>{editingId ? "Update Location" : "Add Location"}</span>
+                </>
+              )}
             </button>
             {editingId && (
               <button onClick={cancelEdit} disabled={loading}
-                className="px-6 py-3 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-semibold transition">
-                Cancel
+                className="px-5 py-2.5 rounded-xl border border-slate-205 text-slate-600 hover:bg-slate-50 transition text-sm font-semibold flex items-center gap-1.5">
+                <FaTimes className="text-xs" />
+                <span>Cancel</span>
               </button>
             )}
           </div>
@@ -410,11 +459,17 @@ function DutyLocations() {
                     <td className="p-4 text-gray-500">{loc.longitude}</td>
                     <td className="p-4">{loc.radius_meters}m</td>
                     <td className="p-4">
-                      <div className="flex gap-3">
+                      <div className="flex gap-2">
                         <button onClick={() => handleEdit(loc)}
-                          className="text-blue-500 hover:text-blue-700 text-sm font-medium">Edit</button>
+                          className="bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1">
+                          <FaPen className="text-[10px]" />
+                          <span>Edit</span>
+                        </button>
                         <button onClick={() => deleteLocation(loc.id)}
-                          className="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                          className="bg-red-50 hover:bg-red-600 text-red-700 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1">
+                          <FaTrashAlt className="text-[10px]" />
+                          <span>Delete</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -432,17 +487,23 @@ function DutyLocations() {
                 <div key={loc.id} className="p-4 space-y-2">
                   <div className="flex justify-between items-center">
                     <h4 className="font-bold text-gray-800 text-sm">📍 {loc.place_name}</h4>
-                    <span className="text-xs bg-blue-50 text-blue-705 font-bold px-2 py-0.5 rounded-full">Radius: {loc.radius_meters}m</span>
+                    <span className="text-xs bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full">Radius: {loc.radius_meters}m</span>
                   </div>
-                  <div className="text-xs text-gray-500 space-y-0.5">
+                  <div className="text-xs text-gray-505 space-y-1">
                     <p><span className="font-semibold text-gray-400">Latitude:</span> {loc.latitude}</p>
                     <p><span className="font-semibold text-gray-400">Longitude:</span> {loc.longitude}</p>
                   </div>
-                  <div className="flex gap-3 pt-1">
+                  <div className="flex gap-2 pt-2">
                     <button onClick={() => handleEdit(loc)}
-                      className="text-blue-600 hover:underline text-xs font-bold">Edit</button>
+                      className="bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+                      <FaPen className="text-[9px]" />
+                      <span>Edit</span>
+                    </button>
                     <button onClick={() => deleteLocation(loc.id)}
-                      className="text-red-650 hover:underline text-xs font-bold">Delete</button>
+                      className="bg-red-50 hover:bg-red-650 text-red-700 hover:text-white px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+                      <FaTrashAlt className="text-[9px]" />
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
               ))

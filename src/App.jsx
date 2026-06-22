@@ -69,16 +69,24 @@ function App() {
     setPermissionError("");
     try {
       // 1. Request GPS
-      await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 });
-      });
+      try {
+        await new Promise((resolve, reject) => {
+          if (!navigator.geolocation) {
+            resolve(); // Skip if no geolocation API
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 });
+        });
+      } catch (gpsErr) {
+        console.warn("GPS request failed or not available", gpsErr);
+        // We will proceed anyway to let the app load
+      }
 
       // 2. Request Camera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         stream.getTracks().forEach(track => track.stop());
       } catch (camErr) {
-        // If no camera exists (e.g. desktop admin), allow continuing if location was granted
         console.warn("Camera request failed or not available", camErr);
       }
 

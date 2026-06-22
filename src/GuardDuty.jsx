@@ -9,6 +9,7 @@ import { addToQueue, getQueue, removeFromQueue, setCached, getCached } from "./l
 import { useToast } from "./Toast";
 import { useLanguage } from "./LanguageContext";
 import LoadingOverlay from "./LoadingOverlay";
+import { FaMapMarkerAlt, FaClipboardList, FaBell, FaBullhorn, FaPause, FaCamera, FaSatelliteDish, FaCheckCircle, FaCalendarDay, FaUser, FaSignOutAlt, FaPlay, FaCircle } from "react-icons/fa";
 
 /* ─── helpers ─────────────────────────────────────── */
 function fmt(iso) {
@@ -128,10 +129,10 @@ function LanguageDropdown({ locale, setLocale, isMobile = false }) {
 }
 
 const TABS = [
-  { key: "duty", label: "Duty Control", icon: "📍", desc: "Check In / Out" },
-  { key: "history", label: "Attendance", icon: "📋", desc: "Your History" },
-  { key: "incidents", label: "Incidents", icon: "🚨", desc: "Report Incidents" },
-  { key: "circulars", label: "Circulars", icon: "📢", desc: "Announcements" },
+  { key: "duty", label: "Shift Control", icon: <FaMapMarkerAlt />, desc: "Check In / Out" },
+  { key: "history", label: "Attendance", icon: <FaClipboardList />, desc: "Your History" },
+  { key: "incidents", label: "Incidents", icon: <FaBell />, desc: "Report Incidents" },
+  { key: "circulars", label: "Circulars", icon: <FaBullhorn />, desc: "Announcements" },
 ];/* ─── Circular feed (read-only) ─── */
 function CircularFeed({ guardId, guardName }) {
   const [items, setItems] = useState([]);
@@ -162,20 +163,20 @@ function CircularFeed({ guardId, guardName }) {
   return (
     <div className="space-y-3">
       {items.length === 0 ? (
-        <div className="flex flex-col items-center py-16 text-gray-300">
-          <span className="text-5xl mb-3">📢</span>
-          <p className="font-medium text-gray-400">No announcements yet</p>
+        <div className="flex flex-col items-center py-16 text-gray-300 bg-white md:glass-card rounded-3xl md:py-24 border border-gray-100 md:border-slate-200/80 shadow-sm">
+          <span className="text-5xl mb-4">📢</span>
+          <p className="font-medium text-gray-400 md:text-gray-500">No announcements yet</p>
         </div>
       ) : (
         items.map(c => (
-          <div key={c.id} className="bg-white rounded-2xl p-5 shadow-sm border border-blue-50 hover:shadow-md transition">
-            <div className="flex justify-between items-start mb-2">
-              <p className="font-bold text-gray-800">📌 {c.title}</p>
-              <span className="text-xs text-gray-400 whitespace-nowrap ml-3 bg-gray-50 px-2 py-1 rounded-lg">
+          <div key={c.id} className="bg-white rounded-2xl p-5 md:p-8 md:glass-card shadow-sm border border-blue-50 md:border-slate-200/80 hover:shadow-md transition">
+            <div className="flex justify-between items-start mb-2 md:mb-4">
+              <p className="font-bold text-gray-800 md:text-base">📌 {c.title}</p>
+              <span className="text-xs md:text-sm text-gray-400 whitespace-nowrap ml-3 bg-gray-50 md:bg-white/50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-transparent md:border-slate-200">
                 {new Date(c.created_at).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}
               </span>
             </div>
-            <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{c.content}</p>
+            <p className="text-gray-600 text-sm md:text-base leading-relaxed whitespace-pre-line">{c.content}</p>
           </div>
         ))
       )}
@@ -747,27 +748,28 @@ function GuardDuty({ guardId, guardName }) {
         }
         return;
       }
-      // 1. First, search for any active check-in (where check_out_time is null)
+      // 1. Search for active check-in (check_out_time is null) started within the last 16 hours
+      // This prevents forgotten shifts from continuing forever and handles night shifts crossing midnight.
+      const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
       let { data } = await supabase
         .from("attendance")
         .select("*, duty_locations(place_name)")
         .eq("guard_id", guardId)
         .is("check_out_time", null)
+        .gte("check_in_time", sixteenHoursAgo)
         .order("check_in_time", { ascending: false })
         .limit(1);
 
-      // 2. If no active check-in, search for the latest check-in that was started today
+      // 2. If no active check-in, search for the latest completed check-in within the same rolling 16-hour window
       if (!data || data.length === 0) {
-        const today = new Date().toISOString().split("T")[0];
-        const { data: todayRecords } = await supabase
+        const { data: recentRecords } = await supabase
           .from("attendance")
           .select("*, duty_locations(place_name)")
           .eq("guard_id", guardId)
-          .gte("check_in_time", today)
-          .lte("check_in_time", today + "T23:59:59")
+          .gte("check_in_time", sixteenHoursAgo)
           .order("check_in_time", { ascending: false })
           .limit(1);
-        data = todayRecords;
+        data = recentRecords;
       }
       
       let rec = null;
@@ -1240,7 +1242,7 @@ function GuardDuty({ guardId, guardName }) {
 
   async function handleLogout() { stopLiveTracking(); await supabase.auth.signOut(); window.location.reload(); }
 
-  const statusColour = gpsType === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+  const statusColour = gpsType === "success" ? "bg-blue-50 border-blue-200 text-blue-700"
     : gpsType === "warn" ? "bg-amber-50 border-amber-200 text-amber-700"
       : "bg-blue-50 border-blue-200 text-blue-700";
 
@@ -1258,12 +1260,12 @@ function GuardDuty({ guardId, guardName }) {
       )}
 
       {/* Primary status card */}
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className={`px-6 py-5 ${isOnDuty ? "bg-gradient-to-r from-emerald-500 to-teal-500" : "bg-gradient-to-r from-slate-700 to-slate-800"}`}>
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden md:glass-card md:border-slate-200/80">
+        <div className={`px-6 py-5 md:py-8 md:px-8 ${isOnDuty ? "bg-gradient-to-r from-blue-600 to-blue-700" : "bg-gradient-to-r from-slate-700 to-slate-800 md:from-slate-800 md:to-slate-900"}`}>
           <div className="flex justify-between items-center">
             <div>
               <p className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-1">{t("status")}</p>
-              <p className="text-white font-bold text-xl">{isOnDuty ? "🟢 " + t("on_active_duty") : todayRecord ? "✅ " + t("duty_complete") : "⏸️ " + t("off_duty")}</p>
+              <p className="text-white font-bold text-lg flex items-center">{isOnDuty ? <><span className="inline-block mr-2"><FaCircle className="text-[10px] text-green-400" /></span>{t("on_active_duty")}</> : todayRecord ? <><span className="inline-block mr-2"><FaCheckCircle className="text-lg text-green-400"/></span>{t("duty_complete")}</> : <><span className="bg-blue-500 w-6 h-6 rounded flex items-center justify-center mr-2"><FaPause className="text-white text-[10px]" /></span>{t("off_duty")}</>}</p>
             </div>
             {isOnDuty && elapsedTime && (
               <div className="text-right">
@@ -1274,11 +1276,11 @@ function GuardDuty({ guardId, guardName }) {
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 md:p-8 space-y-4 md:space-y-6">
           {dutyLocation ? (
-            <div className={`flex gap-4 rounded-2xl p-4 ${isOnTempDuty ? "bg-amber-50 border border-amber-200" : "bg-gray-50"}`}>
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isOnTempDuty ? "bg-amber-100" : "bg-blue-100"}`}>
-                {isOnTempDuty ? "⏱️" : "📍"}
+            <div className={`flex gap-4 rounded-2xl p-4 md:p-6 ${isOnTempDuty ? "bg-amber-50 border border-amber-200" : "bg-gray-50 md:bg-white/50 border border-transparent md:border-slate-200"}`}>
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 text-xl ${isOnTempDuty ? "bg-amber-100" : "bg-blue-100"}`}>
+                {isOnTempDuty ? <FaCalendarDay className="text-amber-500" /> : <FaMapMarkerAlt className="text-blue-600" />}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1292,8 +1294,8 @@ function GuardDuty({ guardId, guardName }) {
                   <p className="text-xs text-amber-600 mt-1">Primary: {primaryLocation.place_name} (resumes after temp period)</p>
                 )}
                 {isOnDuty && gpsDistance !== null && (
-                  <div className={`flex items-center gap-1.5 mt-1.5 text-xs font-semibold ${gpsDistance > dutyLocation.radius_meters ? "text-red-600" : "text-emerald-600"}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${gpsDistance > dutyLocation.radius_meters ? "bg-red-500" : "bg-emerald-500"}`} />
+                  <div className={`flex items-center gap-1.5 mt-1.5 text-xs font-semibold ${gpsDistance > dutyLocation.radius_meters ? "text-red-600" : "text-blue-600"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${gpsDistance > dutyLocation.radius_meters ? "bg-red-500" : "bg-blue-500"}`} />
                     {gpsDistance > dutyLocation.radius_meters ? t("outside_zone") : t("inside_zone")} — {gpsDistance}m from center
                   </div>
                 )}
@@ -1308,10 +1310,10 @@ function GuardDuty({ guardId, guardName }) {
           <button
             onClick={isOnLeaveToday ? null : (isOnDuty ? handleCheckOut : handleCheckIn)}
             disabled={loading || (!dutyLocation && !isOnDuty) || isOnLeaveToday}
-            className={`w-full h-14 rounded-2xl text-white font-bold text-base transition-all shadow-md active:scale-[0.98] ${loading ? "bg-gray-300 cursor-not-allowed" :
+            className={`w-full h-12 md:h-10 rounded-xl md:rounded-lg text-white font-bold text-sm transition-all shadow-sm active:scale-[0.98] ${loading ? "bg-gray-300 cursor-not-allowed" :
               isOnLeaveToday ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200" :
               isOnDuty ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-200" :
-                "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-emerald-200"
+                "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
               }`}
           >
             {loading ? (
@@ -1319,32 +1321,32 @@ function GuardDuty({ guardId, guardName }) {
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 {t("submitting")}
               </span>
-            ) : isOnLeaveToday ? "🌴 " + t("on_approved_leave", "On Approved Leave") : isOnDuty ? "📸  " + t("end_duty") : "📍  " + t("start_duty")}
+            ) : isOnLeaveToday ? <><FaCalendarDay className="mr-2 inline-block"/>{t("on_approved_leave", "On Approved Leave")}</> : isOnDuty ? <><FaCamera className="mr-2 inline-block"/>{t("end_duty")}</> : <><FaMapMarkerAlt className="mr-2 inline-block"/>{t("start_duty")}</>}
           </button>
         </div>
       </div>
 
       {isOnDuty && (
-        <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-4 flex items-center justify-between">
+        <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm border border-blue-100 p-4 md:p-6 flex items-center justify-between md:glass-card md:border-blue-200/50">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">🛰️</div>
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg"><FaSatelliteDish /></div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                 <p className="text-sm font-bold text-gray-800">{t("live_tracking_active")}</p>
               </div>
               <p className="text-xs text-gray-400">{t("auto_pings")}</p>
             </div>
           </div>
-          <button onClick={forceLocationPush} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-4 py-2 rounded-xl font-semibold transition shadow-sm">
+          <button onClick={forceLocationPush} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-xl font-semibold transition shadow-sm">
             {t("ping_now")}
           </button>
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{t("guard_details")}</p>
-        <div className="grid grid-cols-2 gap-4 text-sm">
+      <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm border border-gray-100 p-5 md:p-8 md:glass-card md:border-slate-200/80">
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 md:mb-5">{t("guard_details")}</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 text-sm">
           <div>
             <p className="text-gray-400 text-xs mb-0.5">{t("name")}</p>
             <p className="font-semibold text-gray-800">{guardName || "—"}</p>
@@ -1366,8 +1368,8 @@ function GuardDuty({ guardId, guardName }) {
   );
 
   const historyPanel = (
-    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
+    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden md:glass-card md:border-slate-200/80">
+      <div className="px-6 py-4 md:py-6 md:px-8 border-b border-gray-50 md:border-slate-200/50 flex justify-between items-center bg-gray-50/30">
         <div>
           <h2 className="font-bold text-gray-800 text-lg">{t("attendance_history")}</h2>
           <p className="text-xs text-gray-400 mt-0.5">{attendanceHistory.length} {t("records_found")}</p>
@@ -1406,11 +1408,11 @@ function GuardDuty({ guardId, guardName }) {
         ) : attendanceHistory.map(item => {
           const loc = item.duty_locations?.place_name;
           return (
-            <div key={item.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50/50 transition">
+            <div key={item.id} className="px-6 py-4 md:py-5 md:px-8 flex justify-between items-center hover:bg-gray-50/50 transition">
               <div>
-                <p className="font-semibold text-gray-800">{fmtDate(item.check_in_time)}</p>
+                <p className="font-semibold text-gray-800 md:text-base">{fmtDate(item.check_in_time)}</p>
                 {loc && <p className="text-xs text-blue-600 mt-0.5">📍 {loc}</p>}
-                <p className="text-xs text-gray-400 mt-0.5">In: {fmt(item.check_in_time)} &nbsp;·&nbsp; Out: {fmt(item.check_out_time)}</p>
+                <p className="text-xs text-gray-400 mt-1">In: {fmt(item.check_in_time)} &nbsp;·&nbsp; Out: {fmt(item.check_out_time)}</p>
               </div>
               {(() => {
                 let displayStatus = item.status;
@@ -1464,8 +1466,8 @@ function GuardDuty({ guardId, guardName }) {
       </Suspense>
     ),
     circulars: (
-      <div className="space-y-4">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
+      <div className="space-y-4 md:space-y-6">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 md:glass-card md:p-8 md:border-slate-200/80">
           <h2 className="font-bold text-gray-800 text-lg">{t("official_announcements")}</h2>
           <p className="text-xs text-gray-400 mt-0.5">{t("circulars_desc")}</p>
         </div>
@@ -1684,8 +1686,8 @@ function GuardDuty({ guardId, guardName }) {
                 👤
               </button>
               {isOnDuty && (
-                <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-semibold">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live
+                <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-semibold">
+                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> Live
                 </span>
               )}
               <Notifications role="guard" guardId={guardId} guardName={guardName} onNavigate={handleNavigate} />
@@ -1751,44 +1753,26 @@ function GuardDuty({ guardId, guardName }) {
       {/* ╔════════════════════════════════════════╗
           ║  DESKTOP / TABLET LAYOUT (≥ md)        ║
           ╚════════════════════════════════════════╝ */}
-      <div className="hidden md:flex min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100">
+      <div className="hidden md:flex min-h-screen bg-slate-50">
 
         {/* Desktop LEFT SIDEBAR */}
-        <aside className="w-72 shrink-0 flex flex-col bg-white border-r border-gray-100 shadow-sm">
+        <aside className="w-72 shrink-0 flex flex-col bg-slate-900 border-r border-slate-800 shadow-xl">
           {/* Brand / guard identity */}
-          <div className="px-6 py-8 text-center border-b border-gray-50">
+          <div className="px-6 py-8 text-center border-b border-slate-800">
             <div className="w-20 h-20 mx-auto mb-4 relative flex items-center justify-center">
-              <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover rounded-3xl shadow-xl" />
-              <button 
-                onClick={() => setShowProfile(true)}
-                className="absolute -bottom-1 -right-1 w-8 h-8 bg-white text-blue-600 rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 transition border border-gray-100 z-10 font-bold"
-                title="Profile & Documents"
-              >
-                👤
-              </button>
+              <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover rounded-3xl shadow-xl bg-white p-1" />
             </div>
-            <h1 className="font-bold text-gray-800 text-xl">{guardName || "Guard"}</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Security Officer</p>
+            <h1 className="font-bold text-white text-base">{guardName || "Guard"}</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Security Officer</p>
             {isOnDuty && (
               <div className="mt-3 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-emerald-600 font-mono font-bold text-sm">{elapsedTime}</span>
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <span className="text-blue-400 font-mono font-bold text-sm">{elapsedTime}</span>
               </div>
             )}
           </div>
 
-          {/* Today's status pill */}
-          <div className="px-5 py-4 border-b border-gray-50">
-            <div className={`rounded-2xl px-4 py-3 ${isOnDuty ? "bg-emerald-50" : "bg-gray-50"}`}>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Today's Status</p>
-              <p className={`font-bold text-sm ${isOnDuty ? "text-emerald-600" : "text-gray-600"}`}>
-                {isOnDuty ? "🟢 On Active Duty" : todayRecord ? "✅ Duty Completed" : "⏸️ Not Started"}
-              </p>
-              {dutyLocation && (
-                <p className="text-xs text-gray-400 mt-1">📍 {dutyLocation.place_name}</p>
-              )}
-            </div>
-          </div>
+
 
           {/* Sidebar navigation */}
           <nav className="flex-1 px-4 py-4 space-y-1">
@@ -1797,14 +1781,14 @@ function GuardDuty({ guardId, guardName }) {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left transition-all ${activeTab === tab.key
-                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                   }`}
               >
                 <span className="text-xl">{tab.icon}</span>
                 <div>
-                  <p className="font-semibold text-sm">{t(tab.key)}</p>
-                  <p className={`text-xs ${activeTab === tab.key ? "text-blue-200" : "text-gray-400"}`}>{t(tab.key + "_desc")}</p>
+                  <p className={`font-semibold text-sm ${activeTab === tab.key ? "text-white" : "text-slate-300"}`}>{t(tab.key)}</p>
+                  <p className={`text-[10px] mt-0.5 ${activeTab === tab.key ? "text-blue-200" : "text-slate-500"}`}>{t(tab.key + "_desc")}</p>
                 </div>
               </button>
             ))}
@@ -1815,21 +1799,28 @@ function GuardDuty({ guardId, guardName }) {
         {/* Desktop MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Desktop top bar */}
-          <header className="bg-white border-b border-gray-100 shadow-sm px-8 py-4 flex items-center justify-between shrink-0 relative z-50">
+          <header className="bg-white border-b border-gray-100 shadow-sm px-8 py-3.5 flex items-center justify-between shrink-0 relative z-50">
             <div>
-              <h2 className="font-bold text-gray-800 text-xl">
-                {TABS.find(tab => tab.key === activeTab)?.icon} {t(activeTab)}
+              <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                <span className="text-blue-600 flex-shrink-0">{TABS.find(tab => tab.key === activeTab)?.icon}</span> {t(activeTab)}
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">{t(activeTab + "_desc")}</p>
             </div>
             <div className="flex items-center gap-3">
               {isOnDuty && (
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                  <span className="text-emerald-700 font-mono font-bold text-sm">{elapsedTime}</span>
-                  <span className="text-emerald-600 text-xs">{t("on_active_duty")}</span>
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-blue-700 font-mono font-bold text-sm">{elapsedTime}</span>
+                  <span className="text-blue-600 text-xs">{t("on_active_duty")}</span>
                 </div>
               )}
+              <button 
+                onClick={() => setShowProfile(true)}
+                className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-sm hover:bg-blue-100 transition"
+                title="Profile & Documents"
+              >
+                👤
+              </button>
               <Notifications role="guard" guardId={guardId} guardName={guardName} onNavigate={handleNavigate} />
               <div className="text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-xl hidden lg:block">
                 {new Date().toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}

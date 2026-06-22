@@ -22,15 +22,15 @@ function CustomSelect({ value, onChange, options, placeholder = "Select option",
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full ${heightClass} border px-3 rounded-xl flex items-center justify-between transition-all bg-white text-sm text-left ${
+        className={`w-full ${heightClass} border px-3 rounded-xl flex items-center justify-between transition-all text-xs text-left ${
           isOpen
-            ? "border-blue-500 ring-4 ring-blue-500/10"
+            ? "border-blue-500 ring-4 ring-blue-500/10 bg-white"
             : error
-              ? "border-red-400 focus:ring-2 focus:ring-red-300"
-              : "border-gray-200 hover:border-gray-300"
+              ? "border-red-400 focus:ring-2 focus:ring-red-300 bg-[#F4F6F9]"
+              : "border-gray-200 hover:border-gray-300 bg-[#F4F6F9] hover:bg-slate-100/60"
         }`}
       >
-        <span className={selectedOption ? "text-gray-805 font-medium" : "text-gray-400"}>
+        <span className={selectedOption ? "text-gray-855 font-medium" : "text-gray-400"}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <svg
@@ -60,7 +60,7 @@ function CustomSelect({ value, onChange, options, placeholder = "Select option",
                   onChange(opt.value);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center ${
+                className={`w-full text-left px-4 py-2.5 text-xs transition-colors flex items-center ${
                   isSelected
                     ? "bg-blue-50 text-blue-700 font-bold border-l-2 border-blue-600"
                     : "text-gray-700 hover:bg-gray-50 font-medium border-l-2 border-transparent"

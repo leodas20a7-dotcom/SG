@@ -8,6 +8,7 @@ const PhoneInput = PhoneInputRaw.default ? PhoneInputRaw.default : PhoneInputRaw
 import 'react-phone-input-2/lib/style.css';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import CustomSelect from "./CustomSelect";
+import { FaUser, FaCalendarAlt, FaKey, FaArrowRight, FaArrowLeft, FaCheck, FaTrashAlt, FaPen, FaClock, FaPlus, FaClipboardCheck } from "react-icons/fa";
 
 const STATUS_OPTIONS = ["Active", "Inactive"];
 const SHIFT_OPTIONS = ["Morning Shift", "Evening Shift", "Night Shift", "Full Day", "Custom"];
@@ -23,13 +24,14 @@ async function autoNotify(title, message, guardId = null, isBroadcast = false) {
   await supabase.from("notifications").insert([{ title, message, guard_id: guardId, is_broadcast: isBroadcast, type: "info", user_role: "guard" }]);
 }
 
-function Guards({ onGuardAdded }) {
+function Guards({ onGuardAdded, onNavigate }) {
   const [guards, setGuards] = useState([]);
   const [locations, setLocations] = useState([]);
   const [shiftTimings, setShiftTimings] = useState(DEFAULT_TIMINGS);
 
   // Wizard Step State
   const [currentStep, setCurrentStep] = useState(1);
+  const [viewMode, setViewMode] = useState("form"); // "form" or "list"
 
   // Active guard for Temporary Override Modal
   const [overrideGuard, setOverrideGuard] = useState(null);
@@ -382,6 +384,7 @@ function Guards({ onGuardAdded }) {
       showToast("Guard added successfully!", "success");
       resetForm();
       fetchGuards();
+      setViewMode("list");
       if (onGuardAdded) onGuardAdded();
     } catch {
       showToast("Network error.", "error");
@@ -392,6 +395,7 @@ function Guards({ onGuardAdded }) {
 
   /* ── start edit ── */
   function startEdit(guard) {
+    setViewMode("form");
     setEditingId(guard.id);
     setPrevDutyLocationId(guard.duty_location_id || null);
     setName(guard.name);
@@ -438,6 +442,7 @@ function Guards({ onGuardAdded }) {
   function cancelEdit() {
     setEditingId(null);
     resetForm();
+    setViewMode("list");
   }
 
   function resetForm() {
@@ -854,51 +859,99 @@ function Guards({ onGuardAdded }) {
 
       <div className="mt-4 space-y-8">
         {/* ─── ADD / EDIT FORM ─── */}
-        <div className={`glass-card rounded-2xl p-6 transition relative z-50 ${editingId ? "ring-2 ring-blue-300" : "ring-1 ring-green-200"}`}>
-          <h2 className="text-xl font-bold mb-6 text-gray-700">
-            {editingId ? "✏️ Edit Guard Profile" : "➕ Add New Guard & Profile Login"}
-          </h2>
+        {viewMode === "form" && (
+          <div className={`glass-card rounded-3xl p-6 md:p-8 transition-all duration-300 relative z-40 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)] ${
+            editingId ? "ring-2 ring-blue-500/20 bg-blue-50/10" : "ring-1 ring-slate-200/50 bg-white/70"
+          }`}>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-xl md:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                {editingId ? (
+                  <>
+                    <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPen className="text-sm" /></span>
+                    <span>Edit Guard Profile</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPlus className="text-sm" /></span>
+                    <span>Add New Guard & Profile Login</span>
+                  </>
+                )}
+              </h2>
+              <p className="text-xs text-slate-450 mt-1 font-medium">Onboard, coordinate, and establish system credentials for guards.</p>
+            </div>
+            {editingId ? (
+              <span className="text-[10px] font-bold uppercase tracking-widest bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                Editing: ID #{editingId}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-2 shadow-sm whitespace-nowrap"
+              >
+                <FaClipboardCheck className="text-sm" />
+                <span>Guards Profile History</span>
+              </button>
+            )}
+          </div>
 
           {/* Stepper progress indicator */}
-          <div className="flex items-center gap-2 mb-6 border-b pb-4 border-gray-100 overflow-x-auto">
+          <div className="flex items-center w-full mb-8 select-none overflow-x-auto pb-2">
             {[
-              { num: 1, name: "Personal Details", icon: "👤" },
-              { num: 2, name: "Constant Assignment", icon: "🏠" },
-              { num: 3, name: "Login Credentials", icon: "🔑" }
-            ].map(step => (
-              <div key={step.num} className="flex items-center gap-2 mr-4 shrink-0">
-                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${currentStep === step.num
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-150"
-                  : currentStep > step.num
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-400"
-                  }`}>
-                  {currentStep > step.num ? "✓" : step.num}
-                </span>
-                <span className={`text-sm font-semibold transition ${currentStep === step.num ? "text-gray-800" : "text-gray-400"
-                  }`}>
-                  {step.icon} {step.name}
-                </span>
-                {step.num < 3 && <span className="text-gray-300 ml-2">➔</span>}
-              </div>
-            ))}
+              { num: 1, name: "Personal Details", icon: FaUser },
+              { num: 2, name: "Assignment", icon: FaCalendarAlt },
+              { num: 3, name: "Login Info", icon: FaKey }
+            ].map((step, index) => {
+              const IconComponent = step.icon;
+              const isCurrent = currentStep === step.num;
+              const isCompleted = currentStep > step.num;
+              return (
+                <div key={step.num} className="flex-1 flex items-center min-w-[140px] last:flex-none">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                      isCurrent
+                        ? "bg-blue-600 text-white shadow-md shadow-blue-100 scale-105"
+                        : isCompleted
+                          ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                          : "bg-slate-200/90 text-slate-600 border border-slate-300/30"
+                    }`}>
+                      {isCompleted ? <FaCheck className="text-xs" /> : <IconComponent className="text-xs" />}
+                    </div>
+                    <div className="text-left">
+                      <span className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Step 0{step.num}</span>
+                      <span className={`text-[11px] md:text-xs font-bold whitespace-nowrap ${isCurrent ? "text-slate-800" : "text-slate-650"}`}>{step.name}</span>
+                    </div>
+                  </div>
+                  {index < 2 && (
+                    <div className="flex-1 mx-4 h-0.5 bg-slate-200/80 relative min-w-[20px]">
+                      <div className="absolute top-0 left-0 h-full bg-blue-650 transition-all duration-500" 
+                           style={{ width: isCompleted ? "100%" : "0%" }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Step 1: Personal details */}
           {currentStep === 1 && (
-            <div className="space-y-4 animate-fade-in">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Personal Details</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-5 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">Guard Name</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Guard Name</label>
                   <input type="text" placeholder="Full name" value={name}
                     onChange={e => { setName(e.target.value); clearError("name"); }}
-                    className={`w-full h-11 border p-3 rounded-xl focus:outline-none focus:ring-2 transition ${errors.name ? "border-red-400 focus:ring-red-300" : "border-gray-200 focus:ring-blue-300"}`}
+                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
+                      errors.name 
+                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
+                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                    }`}
                   />
-                  {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+                  {errors.name && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.name}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">Phone Number</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Phone Number</label>
                   <PhoneInput
                     country={'au'}
                     enableSearch={true}
@@ -908,20 +961,22 @@ function Guards({ onGuardAdded }) {
                       width: '100%',
                       height: '44px',
                       borderRadius: '0.75rem',
-                      borderColor: errors.phone ? '#f87171' : '#e5e7eb',
-                      background: '#ffffff'
+                      borderColor: errors.phone ? '#f87171' : '#e2e8f0',
+                      background: '#F4F6F9',
+                      fontSize: '12px',
+                      transition: 'all 0.2s'
                     }}
                     buttonStyle={{
                       borderRadius: '0.75rem 0 0 0.75rem',
-                      borderColor: errors.phone ? '#f87171' : '#e5e7eb',
-                      background: '#f9fafb'
+                      borderColor: errors.phone ? '#f87171' : '#e2e8f0',
+                      background: '#f1f5f9'
                     }}
                     dropdownStyle={{
                       width: '300px',
                       paddingLeft: '10px',
                       borderRadius: '0.75rem',
                       boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                      border: '1px solid #e5e7eb',
+                      border: '1px solid #e2e8f0',
                       overflow: 'hidden',
                       paddingTop: '0px',
                       margin: '0px'
@@ -931,43 +986,45 @@ function Guards({ onGuardAdded }) {
                       margin: '8px 5%',
                       padding: '8px 10px 8px 30px',
                       borderRadius: '0.5rem',
-                      border: '1px solid #d1d5db',
-                      backgroundColor: '#f9fafb',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f8fafc',
                       fontSize: '13px',
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
                   />
-                  {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                  {errors.phone && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.phone}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">Place</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Place</label>
                   <input type="text" placeholder="Place / Area" value={site}
                     onChange={e => { setSite(e.target.value); clearError("site"); }}
-                    className={`w-full h-11 border p-3 rounded-xl focus:outline-none focus:ring-2 transition ${errors.site ? "border-red-400 focus:ring-red-300" : "border-gray-200 focus:ring-blue-300"}`}
+                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
+                      errors.site 
+                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
+                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                    }`}
                   />
-                  {errors.site && <p className="text-red-500 text-xs mt-1">{errors.site}</p>}
+                  {errors.site && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.site}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">Status</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Status</label>
                   <CustomSelect
                     value={status}
                     onChange={val => setStatus(val)}
                     options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
                     placeholder="Select Status"
+                    heightClass="h-11"
                   />
                 </div>
               </div>
             </div>
           )}
-
-          {/* Step 2: Constant Assignment */}
           {currentStep === 2 && (
-            <div className="space-y-4 animate-fade-in">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Constant Assignment</p>
-              <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-6 space-y-4">
+            <div className="space-y-5 animate-fade-in">
+              <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-5 md:p-6 space-y-6">
                 <div>
-                  <p className="text-sm font-bold text-blue-600 mb-1.5">🏠 Primary Fixed Location</p>
+                  <p className="block text-[11px] font-bold text-slate-650 uppercase tracking-wider mb-2">🏠 Primary Fixed Location</p>
                   <CustomSelect
                     value={dutyLocationId}
                     onChange={val => { setDutyLocationId(val); clearError("dutyLocationId"); }}
@@ -976,11 +1033,12 @@ function Guards({ onGuardAdded }) {
                       ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
                     ]}
                     placeholder="Not assigned"
+                    heightClass="h-11"
                   />
                 </div>
 
-                <div>
-                  <p className="text-sm font-bold text-blue-600 mb-1.5">⏰ Constant Shift Timing</p>
+                <div className="border-t border-slate-200/60 pt-5">
+                  <p className="block text-[11px] font-bold text-slate-650 uppercase tracking-wider mb-2">⏰ Constant Shift Timing</p>
                   <CustomSelect
                     value={shiftName}
                     onChange={val => {
@@ -996,17 +1054,18 @@ function Guards({ onGuardAdded }) {
                       ...SHIFT_OPTIONS.map(s => ({ value: s, label: s }))
                     ]}
                     placeholder="Select Constant Shift"
+                    heightClass="h-11"
                   />
-                  <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
-                      <label className="text-xs text-blue-600 font-medium">Start Time</label>
+                      <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Start Time</label>
                       <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                        className="w-full h-10 border border-blue-200 p-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white" />
+                        className="w-full h-11 border border-slate-200 px-3 rounded-xl text-xs focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white transition" />
                     </div>
                     <div>
-                      <label className="text-xs text-blue-600 font-medium">End Time</label>
+                      <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">End Time</label>
                       <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
-                        className="w-full h-10 border border-blue-200 p-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white" />
+                        className="w-full h-11 border border-slate-200 px-3 rounded-xl text-xs focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white transition" />
                     </div>
                   </div>
                 </div>
@@ -1016,50 +1075,56 @@ function Guards({ onGuardAdded }) {
 
           {/* Step 3: Login Credentials */}
           {currentStep === 3 && (
-            <div className="space-y-4 animate-fade-in">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Login Credentials</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-5 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">Email {editingId && <span className="text-gray-405">(read-only during update)</span>}</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                    Email {editingId && <span className="text-slate-400 font-normal normal-case">(read-only during update)</span>}
+                  </label>
                   <input type="email" placeholder="guard@example.com" value={email}
                     onChange={e => { setEmail(e.target.value); clearError("email"); }}
                     readOnly={!!editingId}
-                    className={`w-full h-11 border p-3 rounded-xl focus:outline-none focus:ring-2 transition ${
+                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs ${
                       editingId 
-                        ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200 focus:ring-transparent" 
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 focus:ring-transparent" 
                         : errors.email 
-                          ? "border-red-400 focus:ring-red-300" 
-                          : "border-gray-200 focus:ring-blue-300"
+                          ? "border-red-400 focus:ring-red-500/10 focus:border-red-500 bg-[#F4F6F9]" 
+                          : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white"
                     }`}
                   />
-                  {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                  {errors.email && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.email}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
-                    Password {editingId && <span className="text-gray-400">(leave blank to keep current)</span>}
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                    Password {editingId && <span className="text-slate-400 font-normal normal-case">(leave blank to keep current)</span>}
                   </label>
                   <input type="password" placeholder="Min 6 characters" value={password}
                     onChange={e => { setPassword(e.target.value); clearError("password"); }}
-                    className={`w-full h-11 border p-3 rounded-xl focus:outline-none focus:ring-2 transition ${errors.password ? "border-red-400 focus:ring-red-300" : "border-gray-200 focus:ring-blue-300"}`}
+                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs ${
+                      errors.password 
+                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500 bg-[#F4F6F9]" 
+                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white"
+                    }`}
                   />
-                  {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                  {errors.password && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.password}</p>}
                 </div>
               </div>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+          <div className="flex justify-between items-center mt-8 pt-5 border-t border-slate-150">
             <div className="flex gap-2">
               {currentStep > 1 && (
                 <button type="button" onClick={() => setCurrentStep(currentStep - 1)}
-                  className="px-5 py-2.5 rounded-xl border border-gray-350 text-gray-600 hover:bg-gray-50 transition text-sm font-semibold">
-                  Back
+                  className="px-4 py-2 rounded-xl border border-slate-250 text-slate-650 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200 text-xs font-semibold flex items-center gap-1.5">
+                  <FaArrowLeft className="text-xs" />
+                  <span>Back</span>
                 </button>
               )}
               {editingId && (
                 <button type="button" onClick={cancelEdit}
-                  className="px-5 py-2.5 rounded-xl border border-gray-300 text-red-600 hover:bg-red-50 transition text-sm font-semibold">
+                  className="px-4 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50/80 transition-all duration-200 text-xs font-semibold">
                   Cancel
                 </button>
               )}
@@ -1071,24 +1136,60 @@ function Guards({ onGuardAdded }) {
                   if (currentStep === 1 && !validateStep1()) return;
                   setCurrentStep(currentStep + 1);
                 }}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition text-sm shadow-md shadow-indigo-150">
-                  Next Step ➔
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all duration-300 text-xs shadow-md shadow-blue-150 flex items-center gap-1.5">
+                  <span>Next Step</span>
+                  <FaArrowRight className="text-xs" />
                 </button>
               ) : (
                 <button type="button" onClick={editingId ? updateGuard : addGuard} disabled={loading}
-                  className={`px-8 py-2.5 rounded-xl text-white font-bold transition shadow-md ${loading ? "bg-gray-300 cursor-not-allowed" : editingId ? "bg-blue-600 hover:bg-blue-700 shadow-blue-150" : "bg-green-600 hover:bg-green-700 shadow-green-150"}`}>
-                  {loading ? "Saving…" : editingId ? "Save Changes" : "Onboard Guard"}
+                  className={`px-6 py-2.5 rounded-xl text-white font-bold transition-all duration-300 shadow-md flex items-center gap-2 text-xs ${
+                    loading 
+                      ? "bg-slate-350 cursor-not-allowed" 
+                      : "bg-blue-600 hover:bg-blue-700 shadow-blue-150"
+                  }`}>
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Saving…</span>
+                    </>
+                  ) : editingId ? (
+                    <>
+                      <FaCheck className="text-xs" />
+                      <span>Save Changes</span>
+                    </>
+                  ) : (
+                    <>
+                      <FaPlus className="text-xs" />
+                      <span>Onboard Guard</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
           </div>
         </div>
+        )}
 
         {/* ─── GUARDS TABLE ─── */}
-        <div className="glass-card rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="font-bold text-gray-800 text-lg">Guard Profiles ({guards.length})</h2>
-          </div>
+        {viewMode === "list" && (
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white/80">
+              <h2 className="font-bold text-gray-800 text-lg">Guard Profiles ({guards.length})</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setViewMode("form");
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 shadow-md shadow-blue-150"
+              >
+                <FaPlus className="text-xs" />
+                <span>Onboard New Guard</span>
+              </button>
+            </div>
           <div className="overflow-x-auto hidden md:block">
             <table className="w-full border-collapse text-sm min-w-[800px]">
               <thead>
@@ -1113,9 +1214,10 @@ function Guards({ onGuardAdded }) {
                         <button
                           type="button"
                           onClick={() => setSelectedShiftGuard(guard)}
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap"
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap"
                         >
-                          📅 View Details
+                          <FaCalendarAlt className="text-xs" />
+                          <span>View Details</span>
                         </button>
                       </td>
                       <td className="px-4 py-3">
@@ -1141,11 +1243,20 @@ function Guards({ onGuardAdded }) {
                               setTempEndTime("");
                             }
                           }}
-                            className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition text-nowrap">⏱️ Temp Override</button>
+                            className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shadow-sm shadow-amber-100">
+                            <FaClock className="text-xs" />
+                            <span>Temp Override</span>
+                          </button>
                           <button onClick={() => startEdit(guard)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">Edit</button>
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 shadow-sm shadow-blue-100">
+                            <FaPen className="text-[10px]" />
+                            <span>Edit</span>
+                          </button>
                           <button onClick={() => setConfirmDelete({ id: guard.id, name: guard.name })}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">Delete</button>
+                            className="bg-red-500 hover:bg-red-650 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 shadow-sm shadow-red-100">
+                            <FaTrashAlt className="text-[10px]" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1198,9 +1309,10 @@ function Guards({ onGuardAdded }) {
                       <button
                         type="button"
                         onClick={() => setSelectedShiftGuard(guard)}
-                        className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-2 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap text-center"
+                        className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-2 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap text-center flex items-center justify-center gap-1"
                       >
-                        📅 Schedule
+                        <FaCalendarAlt className="text-[10px]" />
+                        <span>Schedule</span>
                       </button>
                       <button 
                         onClick={() => {
@@ -1219,21 +1331,24 @@ function Guards({ onGuardAdded }) {
                             setTempEndTime("");
                           }
                         }}
-                        className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold transition"
+                        className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
                       >
-                        ⏱️ Temp
+                        <FaClock className="text-[10px]" />
+                        <span>Temp</span>
                       </button>
                       <button 
                         onClick={() => startEdit(guard)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold transition"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
                       >
-                        Edit
+                        <FaPen className="text-[9px]" />
+                        <span>Edit</span>
                       </button>
                       <button 
                         onClick={() => setConfirmDelete({ id: guard.id, name: guard.name })}
-                        className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold transition"
+                        className="bg-red-500 hover:bg-red-650 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
                       >
-                        Delete
+                        <FaTrashAlt className="text-[9px]" />
+                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
@@ -1242,6 +1357,7 @@ function Guards({ onGuardAdded }) {
             )}
           </div>
         </div>
+        )}
       </div>
     </>
   );

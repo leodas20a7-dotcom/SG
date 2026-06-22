@@ -684,7 +684,7 @@ function Analytics({ role, onNavigate }) {
           </div>
 
           {/* Tab buttons - hidden on mobile unless toggled */}
-          <div className={`${mobileMenuOpen ? "flex" : "hidden"} md:flex flex-col md:flex-row flex-wrap gap-2 bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 max-w-full md:max-w-fit animate-fade-in`}>
+          <div className={`${mobileMenuOpen ? "flex" : "hidden"} md:flex flex-col md:flex-row flex-wrap justify-center items-center gap-2 bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 max-w-full md:max-w-fit mx-auto animate-fade-in`}>
             {[
               { key: "dashboard", label: "📊 Summary Dashboard" },
               { key: "performance", label: "🎖️ Performance Tracking" },

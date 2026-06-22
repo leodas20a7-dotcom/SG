@@ -87,32 +87,47 @@ function SystemAccess() {
       <ToastContainer />
       <div className="mt-2">
 
-        <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-cyan-200 relative z-50">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700">👤 Create Admin / Supervisor Login</h2>
+        <div className="glass-card rounded-2xl p-6 mb-8 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)] relative z-50">
+          <h2 className="text-base font-bold mb-6 text-gray-800 flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-blue-50 text-blue-600">👤</span>
+            <span>Create Admin / Supervisor Login</span>
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Full Name</label>
+              <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Full Name</label>
               <input type="text" placeholder="Enter name" value={fullName}
                 onChange={(e) => { setFullName(e.target.value); clearError("fullName"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.fullName ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-cyan-300"}`} />
-              {errors.fullName && <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>}
+                className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
+                  errors.fullName 
+                    ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
+                    : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                }`} />
+              {errors.fullName && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.fullName}</p>}
             </div>
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Email</label>
+              <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Email</label>
               <input type="email" placeholder="Enter email" value={email}
                 onChange={(e) => { setEmail(e.target.value); clearError("email"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.email ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-cyan-300"}`} />
-              {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
+                  errors.email 
+                    ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
+                    : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                }`} />
+              {errors.email && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.email}</p>}
             </div>
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Password</label>
+              <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Password</label>
               <input type="password" placeholder="Min 6 chars" value={password}
                 onChange={(e) => { setPassword(e.target.value); clearError("password"); }}
-                className={`w-full h-12 border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.password ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-cyan-300"}`} />
-              {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+                className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
+                  errors.password 
+                    ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
+                    : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                }`} />
+              {errors.password && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.password}</p>}
             </div>
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Role</label>
+              <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Role</label>
               <CustomSelect
                 value={role}
                 onChange={val => setRole(val)}
@@ -121,24 +136,26 @@ function SystemAccess() {
                   { value: "admin", label: "Admin" }
                 ]}
                 placeholder="Supervisor"
-                heightClass="h-12"
+                heightClass="h-11"
               />
             </div>
           </div>
           <button onClick={addUser} disabled={loading}
-            className={`mt-5 px-6 py-3 rounded-lg text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-cyan-600 hover:bg-cyan-700"}`}>
+            className={`mt-6 px-5 py-2.5 rounded-xl text-white font-bold text-xs bg-blue-600 hover:bg-blue-700 transition shadow-md shadow-blue-150 flex items-center gap-1.5 ${
+              loading ? "bg-slate-350 cursor-not-allowed shadow-none" : ""
+            }`}>
             {loading ? "Creating..." : "Add Administrative User"}
           </button>
         </div>
 
-        <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="glass-card rounded-2xl overflow-hidden border border-slate-150 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.06)]">
           <div className="overflow-x-auto hidden md:block">
             <table className="w-full border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 border-b">
-                  <th className="text-left p-4 text-gray-600 font-semibold">Name</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Email</th>
-                  <th className="text-left p-4 text-gray-600 font-semibold">Role</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-semibold text-[10px] uppercase tracking-wide">Name</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-semibold text-[10px] uppercase tracking-wide">Email</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-semibold text-[10px] uppercase tracking-wide">Role</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,9 +163,9 @@ function SystemAccess() {
                   <tr><td colSpan={3} className="p-8 text-center text-gray-400">No users found.</td></tr>
                 ) : users.map((user) => (
                   <tr key={user.id} className="border-b hover:bg-gray-50 transition">
-                    <td className="p-4 font-medium">{user.full_name}</td>
-                    <td className="p-4">{user.email}</td>
-                    <td className="p-4">
+                    <td className="px-4 py-3 font-semibold text-slate-800 text-sm">{user.full_name}</td>
+                    <td className="px-4 py-3 text-slate-600 text-sm">{user.email}</td>
+                    <td className="px-4 py-3">
                       <span className={`status-chip status-chip-${user.role}`}>
                         {user.role}
                       </span>
@@ -167,7 +184,7 @@ function SystemAccess() {
               users.map((user) => (
                 <div key={user.id} className="p-4 flex justify-between items-center gap-3">
                   <div>
-                    <h4 className="font-bold text-gray-805 text-sm">{user.full_name}</h4>
+                    <h4 className="font-bold text-gray-850 text-sm">{user.full_name}</h4>
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
                   <span className={`status-chip status-chip-${user.role}`}>

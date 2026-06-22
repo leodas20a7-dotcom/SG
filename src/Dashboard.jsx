@@ -362,7 +362,7 @@ function Dashboard({ role, userGuardId }) {
 
         <div className="flex-1 p-4 md:p-8 overflow-y-auto h-full relative z-10">
           {/* Top Bar Header with Premium Glassmorphism */}
-          <div className="glass-card rounded-2xl p-4 md:p-5 mb-8 relative z-50 border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.02)] backdrop-blur-md">
+          <div className="glass-header rounded-2xl p-4 md:p-5 mb-8 relative z-50 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
             <div className="flex justify-between items-center gap-3">
               <div className="flex items-center gap-3">
                 {/* Mobile hamburger - inside the card, aligned with title */}
@@ -415,7 +415,10 @@ function Dashboard({ role, userGuardId }) {
               )}
               {page === "staff-registry" && role === "admin" && (
                 <div className="tour-staff-target w-full">
-                  <StaffRegistry tourTab={tourStep !== null && tourSteps[tourStep]?.page === "staff-registry" ? tourSteps[tourStep]?.tourTab : null} />
+                  <StaffRegistry 
+                    tourTab={tourStep !== null && tourSteps[tourStep]?.page === "staff-registry" ? tourSteps[tourStep]?.tourTab : null} 
+                    onNavigate={setPage}
+                  />
                 </div>
               )}
               {page === "guard-profiles" && (role === "admin" || role === "supervisor") && <GuardProfiles />}

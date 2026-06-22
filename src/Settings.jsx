@@ -18,6 +18,7 @@ function Settings({ onStartTour }) {
   const [confirmConfig, setConfirmConfig] = useState(null);
   const { showToast, ToastContainer } = useToast();
   const [shiftTimings, setShiftTimings] = useState(DEFAULT_TIMINGS);
+  const [activeDetailsModal, setActiveDetailsModal] = useState(null);
 
   async function fetchTimings() {
     try {
@@ -86,7 +87,6 @@ function Settings({ onStartTour }) {
     setLoading(true);
     setLoadingMsg("Deleting all guard photos...");
     try {
-      // 1. List all files in the guard-photos bucket
       const { data: files, error: listErr } = await supabase.storage.from("guard-photos").list("", { limit: 1000 });
       if (listErr) throw listErr;
 
@@ -96,7 +96,6 @@ function Settings({ onStartTour }) {
         if (delErr) throw delErr;
       }
 
-      // 2. Set photo fields to null in the database
       const { error: dbErr } = await supabase
         .from("attendance")
         .update({ check_in_photo: null, check_out_photo: null })
@@ -124,7 +123,6 @@ function Settings({ onStartTour }) {
     setLoading(true);
     setLoadingMsg("Deleting all voice notes...");
     try {
-      // 1. List all files in the voice-requests bucket
       const { data: files, error: listErr } = await supabase.storage.from("voice-requests").list("", { limit: 1000 });
       if (listErr) throw listErr;
 
@@ -134,7 +132,6 @@ function Settings({ onStartTour }) {
         if (delErr) throw delErr;
       }
 
-      // 2. Set audio_url fields to null in the database
       const { error: dbErr } = await supabase
         .from("attendance_requests")
         .update({ audio_url: null })
@@ -158,17 +155,37 @@ function Settings({ onStartTour }) {
     });
   }
 
+  async function executeClearIncidents() {
+    setLoading(true);
+    setLoadingMsg("Clearing incident reports...");
+    try {
+      const { error } = await supabase.from("incidents").delete().not("id", "is", null);
+      if (error) throw error;
+      showToast("Successfully cleared all incident reports from the database.", "success");
+    } catch (err) {
+      showToast("Clear incidents failed: " + err.message, "error");
+    } finally {
+      setLoading(false);
+      setLoadingMsg("");
+    }
+  }
+
+  function clearIncidents() {
+    setConfirmConfig({
+      message: "Are you sure you want to permanently delete ALL incident reports from the database? This action is irreversible.",
+      onConfirm: executeClearIncidents
+    });
+  }
+
   async function executeFullSystemReset() {
     setLoading(true);
     setLoadingMsg("Resetting system database...");
     try {
-      // 1. First, call RPC to remove non-admin user credentials from Supabase Auth
       const { error: rpcErr } = await supabase.rpc("clear_non_admin_auth_users");
       if (rpcErr) {
-        console.warn("Auth cleanup RPC failed (make sure SQL function is created in Supabase):", rpcErr);
+        console.warn("Auth cleanup RPC failed:", rpcErr);
       }
 
-      // Order of deletion to respect potential foreign key constraints (child tables first)
       const tables = [
         "live_tracking",
         "attendance",
@@ -189,7 +206,6 @@ function Settings({ onStartTour }) {
         }
       }
 
-      // Delete non-admin profiles
       const { error: profileErr } = await supabase
         .from("profiles")
         .delete()
@@ -228,94 +244,284 @@ function Settings({ onStartTour }) {
         />
       )}
 
-      <div className="space-y-6 max-w-4xl">
-        <div className="glass-card rounded-3xl p-6 ring-1 ring-blue-150">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">⚙️ System Cleanup Settings</h2>
-          <p className="text-sm text-gray-500 mb-6">Manage system storage limits and clean up old data from Supabase Storage and the database.</p>
+      {/* Details Popup Overlay Modal */}
+      {activeDetailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100/80 relative animate-scale-in">
+            <button 
+              onClick={() => setActiveDetailsModal(null)} 
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition font-bold text-lg"
+            >
+              ✕
+            </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Guard Photos Cleanup Card */}
-            <div className="bg-white/80 rounded-2xl p-5 border border-gray-100 flex flex-col justify-between shadow-sm">
+            {activeDetailsModal === 'photos' && (
               <div>
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl mb-4">📸</div>
-                <h3 className="font-bold text-gray-800 text-lg mb-1">Clear All Guards Photos</h3>
-                <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                  Permanently deletes all check-in and check-out selfie files in Supabase Storage (`guard-photos` bucket) and clears their links in the database. Attendance records remain intact.
+                <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-3xl mb-5 shadow-inner">📸</div>
+                <h3 className="text-xl font-bold text-slate-800 mb-3">Clear Guards Photos Details</h3>
+                <div className="space-y-3.5 text-xs text-slate-600 font-medium leading-relaxed">
+                  <p>
+                    This cleanup operation targets temporary storage space occupied by guard verification selfies uploaded during daily check-ins and check-outs.
+                  </p>
+                  <div className="bg-[#F8F5FF] border border-purple-100 p-4 rounded-xl space-y-2">
+                    <p className="font-bold text-purple-900 uppercase tracking-wider text-[10px]">Database Impact:</p>
+                    <p>Updates the <code>check_in_photo</code> and <code>check_out_photo</code> fields to <code>NULL</code> in the <strong>attendance</strong> table.</p>
+                    <p className="font-bold text-purple-900 uppercase tracking-wider text-[10px] pt-1">Storage Impact:</p>
+                    <p>Permanently deletes all image files inside the <code>guard-photos</code> bucket in Supabase storage.</p>
+                  </div>
+                  <p className="text-[11px] text-amber-600 font-semibold bg-amber-50/50 p-3 rounded-lg border border-amber-100">
+                    ℹ️ <strong>What is preserved:</strong> The attendance logs themselves (date, time, status, locations) are kept in the database.
+                  </p>
+                  <p className="text-[11px] text-red-500 font-bold bg-red-50/50 p-3 rounded-lg border border-red-100">
+                    ⚠️ <strong>Warning:</strong> This action is completely irreversible. Once photos are deleted from storage, they cannot be recovered.
+                  </p>
+                </div>
+                <div className="flex gap-3 justify-end mt-6">
+                  <button 
+                    onClick={() => setActiveDetailsModal(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      clearAllGuardsPhotos();
+                      setActiveDetailsModal(null);
+                    }}
+                    className="btn-danger-premium px-5 py-2.5 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer"
+                  >
+                    Clear All Photos
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeDetailsModal === 'voices' && (
+              <div>
+                <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-3xl mb-5 shadow-inner">🎤</div>
+                <h3 className="text-xl font-bold text-slate-800 mb-3">Clear Voice Notes Details</h3>
+                <div className="space-y-3.5 text-xs text-slate-600 font-medium leading-relaxed">
+                  <p>
+                    This cleanup operation targets audio voice recording notes uploaded by guards when making attendance correction or leave requests.
+                  </p>
+                  <div className="bg-[#F6FAFF] border border-blue-100 p-4 rounded-xl space-y-2">
+                    <p className="font-bold text-blue-900 uppercase tracking-wider text-[10px]">Database Impact:</p>
+                    <p>Updates the <code>audio_url</code> field to <code>NULL</code> in the <strong>attendance_requests</strong> table.</p>
+                    <p className="font-bold text-blue-900 uppercase tracking-wider text-[10px] pt-1">Storage Impact:</p>
+                    <p>Permanently deletes all recording files (<code>.webm</code>) inside the <code>voice-requests</code> bucket in Supabase storage.</p>
+                  </div>
+                  <p className="text-[11px] text-amber-600 font-semibold bg-amber-50/50 p-3 rounded-lg border border-amber-100">
+                    ℹ️ <strong>What is preserved:</strong> The request text transcripts, timestamps, guard names, and approval status are kept in the database.
+                  </p>
+                  <p className="text-[11px] text-red-500 font-bold bg-red-50/50 p-3 rounded-lg border border-red-100">
+                    ⚠️ <strong>Warning:</strong> This action is completely irreversible. Once audio voice notes are deleted, they cannot be recovered.
+                  </p>
+                </div>
+                <div className="flex gap-3 justify-end mt-6">
+                  <button 
+                    onClick={() => setActiveDetailsModal(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      clearAllVoiceNotes();
+                      setActiveDetailsModal(null);
+                    }}
+                    className="btn-danger-premium px-5 py-2.5 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer"
+                  >
+                    Clear All Voice Notes
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeDetailsModal === 'incidents' && (
+              <div>
+                <div className="w-14 h-14 rounded-2xl bg-[#FFF5F5] text-red-600 flex items-center justify-center text-3xl mb-5 shadow-inner border border-red-100">🚨</div>
+                <h3 className="text-xl font-bold text-slate-800 mb-3">Clear Incident Reports Details</h3>
+                <div className="space-y-3.5 text-xs text-slate-600 font-medium leading-relaxed">
+                  <p>
+                    This cleanup operation removes historical incident reports filed by guards in the field.
+                  </p>
+                  <div className="bg-[#FFF5F5] border border-red-100 p-4 rounded-xl space-y-2">
+                    <p className="font-bold text-red-900 uppercase tracking-wider text-[10px]">Database Impact:</p>
+                    <p>Deletes all rows and records from the <strong>incidents</strong> table.</p>
+                  </div>
+                  <p className="text-[11px] text-amber-600 font-semibold bg-amber-50/50 p-3 rounded-lg border border-amber-100">
+                    ℹ️ <strong>What is preserved:</strong> Guard registry records, duty locations, and attendance histories are not affected.
+                  </p>
+                  <p className="text-[11px] text-red-500 font-bold bg-red-50/50 p-3 rounded-lg border border-red-100">
+                    ⚠️ <strong>Warning:</strong> This action is completely irreversible. All reported incident data, logs, and descriptions will be deleted.
+                  </p>
+                </div>
+                <div className="flex gap-3 justify-end mt-6">
+                  <button 
+                    onClick={() => setActiveDetailsModal(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      clearIncidents();
+                      setActiveDetailsModal(null);
+                    }}
+                    className="btn-danger-premium px-5 py-2.5 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer"
+                  >
+                    Clear All Incidents
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeDetailsModal === 'tour' && (
+              <div>
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mb-5 shadow-inner">📖</div>
+                <h3 className="text-xl font-bold text-slate-800 mb-3">System Interactive Tour Details</h3>
+                <div className="space-y-3.5 text-xs text-slate-600 font-medium leading-relaxed">
+                  <p>
+                    Starts a guided, automated audio tour designed to walk administrators through the capabilities of SecureSys.
+                  </p>
+                  <div className="bg-emerald-50/20 border border-emerald-100 p-4 rounded-xl space-y-2 text-emerald-900">
+                    <p className="font-bold uppercase tracking-wider text-[10px]">What the Tour Covers:</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                      <li>Overview of the main Admin Dashboard</li>
+                      <li>Live Tracking Map and Guard GPS monitoring</li>
+                      <li>Staff Registry management and Guard presets</li>
+                      <li>Roster planning and shift settings</li>
+                      <li>Incident logging and audio reports</li>
+                    </ul>
+                  </div>
+                  <p>
+                    The tour features <strong>text-to-speech guidance</strong> (English) and auto-highlights corresponding dashboard widgets as you proceed.
+                  </p>
+                </div>
+                <div className="flex gap-3 justify-end mt-6">
+                  <button 
+                    onClick={() => setActiveDetailsModal(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      onStartTour();
+                      setActiveDetailsModal(null);
+                    }}
+                    className="btn-primary-premium px-5 py-2.5 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer"
+                  >
+                    Start Guided Tour
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-8 w-full">
+        {/* System Cleanup Settings Section - Soft Purple Tint */}
+        <div className="glass-card p-6 bg-[#F8F5FF] border border-purple-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <h2 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
+            <span>⚙️</span>
+            <span>System Cleanup Settings</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mb-6">Manage system storage limits and clean up old data from Supabase Storage and the database.</p>
+
+          {/* 4 Operations Row Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Card 1: Clear Guards Photos */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 flex flex-col justify-between shadow-sm hover:scale-[1.02] hover:shadow-md transition-all duration-300">
+              <div>
+                <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl mb-4 shadow-inner">📸</div>
+                <h3 className="font-bold text-slate-800 text-sm mb-1 uppercase tracking-wider">Clear Guard Photos</h3>
+                <p className="text-[11px] text-slate-450 font-medium mb-4 leading-relaxed line-clamp-3">
+                  Delete all guard check-in/out selfie files from storage and clear their database links.
                 </p>
               </div>
               <button
-                onClick={clearAllGuardsPhotos}
-                className="w-full h-11 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition mt-2 shadow-sm"
+                onClick={() => setActiveDetailsModal('photos')}
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
-                Delete All Selfie Photos
+                More Details
               </button>
             </div>
 
-            {/* Voice Notes Cleanup Card */}
-            <div className="bg-white/80 rounded-2xl p-5 border border-gray-100 flex flex-col justify-between shadow-sm">
+            {/* Card 2: Clear Voice Notes */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 flex flex-col justify-between shadow-sm hover:scale-[1.02] hover:shadow-md transition-all duration-300">
               <div>
-                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl mb-4">🎤</div>
-                <h3 className="font-bold text-gray-800 text-lg mb-1">Clear All Voice Notes</h3>
-                <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                  Permanently deletes all voice note `.webm` files recorded for admin requests in Supabase Storage (`voice-requests` bucket) and sets their links to null. Requests remain intact.
+                <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-650 flex items-center justify-center text-xl mb-4 shadow-inner">🎤</div>
+                <h3 className="font-bold text-slate-800 text-sm mb-1 uppercase tracking-wider">Clear Voice Notes</h3>
+                <p className="text-[11px] text-slate-450 font-medium mb-4 leading-relaxed line-clamp-3">
+                  Remove audio voice recordings from Supabase storage and reset request links.
                 </p>
               </div>
               <button
-                onClick={clearAllVoiceNotes}
-                className="w-full h-11 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition mt-2 shadow-sm"
+                onClick={() => setActiveDetailsModal('voices')}
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
-                Delete All Voice Notes
+                More Details
               </button>
             </div>
 
-            {/* Full System Reset Card */}
-            <div className="bg-white/80 rounded-2xl p-5 border border-red-200 flex flex-col justify-between shadow-sm md:col-span-2">
+            {/* Card 3: Clear Incident Reports */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 flex flex-col justify-between shadow-sm hover:scale-[1.02] hover:shadow-md transition-all duration-300">
               <div>
-                <div className="w-12 h-12 rounded-xl bg-red-50 text-red-650 flex items-center justify-center text-2xl mb-4">⚠️</div>
-                <h3 className="font-bold text-gray-800 text-lg mb-1">Full System Database Reset</h3>
-                <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                  Permanently deletes all data across all tables (guards, attendance, circulars, incidents, shifts, tracking, etc.) from the database. <strong>Administrative login profiles (admins) will not be deleted</strong>, ensuring you don't lose system access.
+                <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl mb-4 shadow-inner border border-rose-100">🚨</div>
+                <h3 className="font-bold text-slate-800 text-sm mb-1 uppercase tracking-wider">Clear Incidents</h3>
+                <p className="text-[11px] text-slate-450 font-medium mb-4 leading-relaxed line-clamp-3">
+                  Permanently deletes all reported incidents and database logs.
                 </p>
               </div>
               <button
-                onClick={fullSystemReset}
-                className="w-full h-11 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition mt-2 shadow-sm"
+                onClick={() => setActiveDetailsModal('incidents')}
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
-                Reset System Database
+                More Details
               </button>
             </div>
 
-            {/* Guided Tour Card */}
-            <div className="bg-white/80 rounded-2xl p-5 border border-indigo-200 flex flex-col justify-between shadow-sm md:col-span-2">
+            {/* Card 4: Guided Tour */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 flex flex-col justify-between shadow-sm hover:scale-[1.02] hover:shadow-md transition-all duration-300">
               <div>
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-605 flex items-center justify-center text-2xl mb-4">📖</div>
-                <h3 className="font-bold text-gray-800 text-lg mb-1">Help & Audio Guided Tour</h3>
-                <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                  Start an automated guided tour that switches between each module and uses text-to-speech voiceover (in English) to explain all functions, buttons, and settings.
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-4 shadow-inner">📖</div>
+                <h3 className="font-bold text-slate-800 text-sm mb-1 uppercase tracking-wider">Guided Tour</h3>
+                <p className="text-[11px] text-slate-450 font-medium mb-4 leading-relaxed line-clamp-3">
+                  Launch the automated system walkthrough with audio voiceover guidance.
                 </p>
               </div>
               <button
-                onClick={onStartTour}
-                className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition mt-2 shadow-sm"
+                onClick={() => setActiveDetailsModal('tour')}
+                className="w-full py-2 bg-[#e6fcf5] hover:bg-[#cbf7ea] text-emerald-800 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
-                Start Help Tour
+                More Details
               </button>
             </div>
+
           </div>
         </div>
 
-        {/* Shift Timings Card */}
-        <div className="glass-card rounded-3xl p-6 ring-1 ring-purple-150">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">⏰ Constant Shift Timings Settings</h2>
-          <p className="text-sm text-gray-500 mb-6">Configure the default start and end times for scheduled shift presets. These are used as autofill values when registering or editing guards.</p>
+        {/* Shift Timings Card - Soft Blue Tint */}
+        <div className="glass-card p-6 bg-[#F6FAFF] border border-blue-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <h2 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
+            <span>⏰</span>
+            <span>Constant Shift Timings Settings</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mb-6">Configure the default start and end times for scheduled shift presets. These are used as autofill values when registering or editing guards.</p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {SHIFT_OPTIONS.map((shift) => (
-              <div key={shift} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                <h3 className="font-bold text-gray-700 mb-2.5">{shift}</h3>
+              <div key={shift} className="p-4 bg-white rounded-2xl border border-slate-100/80 shadow-sm hover:scale-[1.01] hover:shadow-md transition-all duration-300">
+                <h3 className="font-bold text-slate-700 mb-2.5 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="text-indigo-500">⏱️</span>
+                  <span>{shift}</span>
+                </h3>
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-xs text-gray-400 mb-1">Start Time</label>
+                    <label className="block text-[10px] text-slate-400 mb-1 font-bold uppercase tracking-wider">Start Time</label>
                     <input
                       type="time"
                       value={shiftTimings[shift]?.start || ""}
@@ -323,11 +529,11 @@ function Settings({ onStartTour }) {
                         ...prev,
                         [shift]: { ...prev[shift], start: e.target.value },
                       }))}
-                      className="w-full h-10 border border-gray-200 p-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm"
+                      className="w-full h-9 border border-gray-200 px-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white text-xs transition"
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-gray-400 mb-1">End Time</label>
+                    <label className="block text-[10px] text-slate-400 mb-1 font-bold uppercase tracking-wider">End Time</label>
                     <input
                       type="time"
                       value={shiftTimings[shift]?.end || ""}
@@ -335,7 +541,7 @@ function Settings({ onStartTour }) {
                         ...prev,
                         [shift]: { ...prev[shift], end: e.target.value },
                       }))}
-                      className="w-full h-10 border border-gray-200 p-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm"
+                      className="w-full h-9 border border-gray-200 px-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white text-xs transition"
                     />
                   </div>
                 </div>
@@ -343,18 +549,42 @@ function Settings({ onStartTour }) {
             ))}
           </div>
 
-          <div className="flex gap-3 justify-end mt-6 pt-4 border-t border-gray-100">
+          <div className="flex gap-3 justify-end mt-6 pt-4 border-t border-slate-150">
             <button
               onClick={resetTimings}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-550 hover:bg-gray-50 transition text-xs font-bold"
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-650 hover:bg-slate-50 transition text-xs font-bold active:scale-95 bg-white cursor-pointer"
             >
               Reset to Defaults
             </button>
             <button
               onClick={saveTimings}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition text-xs font-bold shadow-md shadow-indigo-150"
+              className="btn-primary-premium px-5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
             >
               Save Shift Timings
+            </button>
+          </div>
+        </div>
+
+        {/* Danger Zone Section - Soft Red Tint */}
+        <div className="glass-card p-6 bg-[#FFF5F5] border border-red-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <h2 className="text-base font-bold text-red-700 mb-2 flex items-center gap-2 uppercase tracking-wider text-sm">
+            <span>⚠️</span>
+            <span>Danger Zone</span>
+          </h2>
+          
+          {/* GitHub-style White Card + Red Left Border */}
+          <div className="bg-white rounded-2xl border border-red-150 border-l-[6px] border-l-[#EF4444] p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-1.5 flex-1">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Full System Database Reset</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Permanently deletes all data across all tables (guards, attendance, circulars, incidents, shifts, tracking, etc.) from the database. <strong>Administrative login profiles (admins) will not be deleted</strong>, ensuring you don't lose system access.
+              </p>
+            </div>
+            <button
+              onClick={fullSystemReset}
+              className="btn-danger-premium px-6 py-3 rounded-xl text-xs font-bold transition shrink-0 active:scale-95 cursor-pointer text-center"
+            >
+              Reset System Database
             </button>
           </div>
         </div>

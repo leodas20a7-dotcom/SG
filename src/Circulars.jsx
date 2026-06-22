@@ -122,7 +122,7 @@ function Circulars({ role, userGuardId }) {
           placeholder="🔍 Search announcements..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full h-11 border border-gray-250 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 text-sm bg-white"
+          className="w-full h-11 border border-gray-250 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 text-xs bg-white"
         />
       </div>
 
@@ -136,15 +136,15 @@ function Circulars({ role, userGuardId }) {
           {paginatedCirculars.map((circ) => (
             <div key={circ.id} className="bg-white/80 rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition">
               <div className="flex justify-between items-start mb-2 gap-3">
-                <h4 className="text-base font-bold text-gray-800">📌 {circ.title}</h4>
+                <h4 className="text-sm font-bold text-gray-800">📌 {circ.title}</h4>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-405 whitespace-nowrap shrink-0">
+                  <span className="text-[11px] text-gray-405 whitespace-nowrap shrink-0">
                     {new Date(circ.created_at).toLocaleDateString([], { dateStyle: "medium" })}
                   </span>
                   {role === "admin" && (
                     <button
                       onClick={() => deleteCircular(circ.id)}
-                      className="text-red-500 hover:text-red-700 font-semibold text-xs bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition"
+                      className="text-red-500 hover:text-red-700 font-semibold text-xs bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-xl transition"
                       title="Delete Circular"
                     >
                       🗑️ Delete
@@ -152,7 +152,7 @@ function Circulars({ role, userGuardId }) {
                   )}
                 </div>
               </div>
-              <p className="text-gray-600 text-sm whitespace-pre-line leading-relaxed">{circ.content}</p>
+              <p className="text-gray-655 text-xs whitespace-pre-line leading-relaxed">{circ.content}</p>
             </div>
           ))}
 
@@ -204,45 +204,51 @@ function Circulars({ role, userGuardId }) {
 
         {/* Admin Broadcast Form */}
         {role === "admin" && (
-          <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-blue-200">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-700">✏️ Broadcast New Circular</h3>
+          <div className="glass-card rounded-2xl p-8 mb-8 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)]">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-blue-50 text-blue-600">✏️</span>
+                <span>Broadcast New Circular</span>
+              </h3>
               <button
+                type="button"
                 onClick={() => {
                   setSearchQuery("");
                   setCurrentPage(1);
                   setShowHistory(true);
                 }}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
               >
                 🕐 View History
               </button>
             </div>
-            <form onSubmit={addCircular} className="space-y-4">
+            <form onSubmit={addCircular} className="space-y-6">
               <div>
-                <label className="block text-sm text-gray-500 mb-1">Title</label>
+                <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Title</label>
                 <input
                   type="text"
                   placeholder="e.g. Mandatory Uniform Updates"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full h-12 border border-gray-300 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full h-11 border px-4 rounded-xl focus:outline-none focus:ring-4 transition text-sm bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-500 mb-1">Message Content</label>
+                <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Message Content</label>
                 <textarea
                   placeholder="Type announcement details here..."
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  rows="4"
-                  className="w-full border border-gray-300 p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  rows="5"
+                  className="w-full border px-4 py-3 rounded-xl focus:outline-none focus:ring-4 transition text-sm bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
                 />
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold transition shadow-md"
+                className={`w-full md:w-auto px-8 py-3 rounded-xl text-white font-bold text-sm transition shadow-md shadow-blue-150 ${
+                  loading ? "bg-slate-300 cursor-not-allowed shadow-none" : "bg-blue-600 hover:bg-blue-700"
+                }`}
               >
                 {loading ? "Publishing..." : "Broadcast Circular"}
               </button>
@@ -269,7 +275,7 @@ function Circulars({ role, userGuardId }) {
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
               <div>
-                <h3 className="text-lg font-bold text-gray-800">📋 Circular History</h3>
+                <h3 className="text-base font-bold text-gray-800">📋 Circular History</h3>
                 <p className="text-xs text-gray-400 mt-0.5">{filteredCirculars.length} announcement{filteredCirculars.length !== 1 ? "s" : ""} found</p>
               </div>
               <button

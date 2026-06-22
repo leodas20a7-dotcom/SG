@@ -13,8 +13,8 @@ function LiveOps({ role, tourView }) {
 
   return (
     <div className="mt-2">
-      {/* Premium Toggle Switch in top-right */}
-      <div className="flex justify-end mb-6">
+      {/* Premium Toggle Switch in center */}
+      <div className="flex justify-center mb-6">
         <div className="p-1 rounded-2xl inline-flex gap-1 shadow-sm border border-gray-100 bg-white/80 backdrop-blur-md">
           <button
             onClick={() => setView("map")}

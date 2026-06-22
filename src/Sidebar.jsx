@@ -9,6 +9,8 @@ import {
   FaCog,
   FaChevronDown,
   FaChevronUp,
+  FaChevronLeft,
+  FaChevronRight,
 } from "react-icons/fa";
 import { useLanguage } from "./LanguageContext";
 
@@ -33,6 +35,7 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
   const sidebarRef = useRef(null);
   const [isAtBottom, setIsAtBottom] = useState(false);
   const [canScroll, setCanScroll] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const checkScroll = () => {
     const el = sidebarRef.current;
@@ -72,15 +75,24 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
   return (
     <>
       {/* Desktop sidebar */}
-      <div className="hidden md:flex md:flex-col w-64 h-screen sticky top-0 shrink-0 glass-sidebar shadow-lg tour-sidebar-target relative">
+      <div className={`hidden md:flex md:flex-col h-screen sticky top-0 shrink-0 glass-sidebar shadow-lg tour-sidebar-target relative transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"}`}>
         <div ref={sidebarRef} className="p-5 flex-1 flex flex-col overflow-y-auto min-h-0">
-          <div className="mb-8 text-center flex flex-col items-center">
-            <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center bg-white shadow-md mb-2">
+          <div 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="mb-8 text-center flex flex-col items-center cursor-pointer select-none group/logo"
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            <div className={`w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center bg-white shadow-md mb-2 transition-all duration-300 group-hover/logo:scale-105 active:scale-95 ${isCollapsed ? "scale-90" : ""}`}>
               <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-xl font-bold text-gray-800">SecureSys</h1>
-            {role && (
-              <span className="inline-block mt-2 px-3 py-1 text-xs rounded-full bg-blue-100 text-blue-700 font-medium capitalize">{role}</span>
+
+            {!isCollapsed && (
+              <>
+                <h1 className="text-xl font-bold text-white transition-colors duration-200 group-hover/logo:text-slate-200 animate-fade-in">SecureSys</h1>
+                {role && (
+                  <span className="inline-block mt-2 px-3 py-0.5 text-[10px] rounded-full bg-white/10 text-slate-100 border border-white/10 font-bold uppercase tracking-wider animate-fade-in">{role}</span>
+                )}
+              </>
             )}
           </div>
 
@@ -92,17 +104,18 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
                 <li
                   key={item.key}
                   onClick={() => onNavigate(item.key)}
-                  className={`cursor-pointer px-4.5 py-3 rounded-xl transition-all duration-300 flex items-center gap-3.5 relative overflow-hidden group ${isActive
-                      ? "bg-gradient-to-r from-blue-500/10 to-indigo-500/5 text-blue-600 font-bold shadow-[0_4px_12px_-4px_rgba(59,130,246,0.12)]"
-                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/80 font-medium"
+                  className={`cursor-pointer rounded-xl transition-all duration-300 flex items-center relative overflow-hidden group ${
+                    isCollapsed ? "justify-center p-3" : "px-4.5 py-3 gap-3.5"
+                  } ${isActive
+                      ? "bg-blue-600 text-white font-bold shadow-md shadow-slate-950/40 border border-white/10"
+                      : "text-slate-400 hover:text-white hover:bg-white/5 font-medium"
                     }`}
+                  title={isCollapsed ? t(item.key) : ""}
                   >
-                  {/* Active Left Glow Bar */}
-                  {isActive && (
-                    <span className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-r-full" />
+                  <Icon className={`text-lg transition-all duration-300 ${isActive ? "text-white scale-110" : "text-slate-400 group-hover:text-white group-hover:scale-110"}`} />
+                  {!isCollapsed && (
+                    <span className="text-[13px] tracking-wide animate-fade-in">{t(item.key)}</span>
                   )}
-                  <Icon className={`text-lg transition-all duration-300 ${isActive ? "text-blue-600 scale-110" : "text-slate-400 group-hover:text-slate-600 group-hover:scale-110"}`} />
-                  <span className="text-[13px] tracking-wide">{t(item.key)}</span>
                 </li>
               );
             })}
@@ -111,7 +124,7 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
         {canScroll && (
           <button
             onClick={handleScrollClick}
-            className="absolute bottom-4 right-4 w-10 h-10 bg-white hover:bg-slate-50 text-blue-600 rounded-full flex items-center justify-center shadow-lg border border-slate-100 hover:scale-105 active:scale-95 transition-all z-20"
+            className="absolute bottom-4 right-4 w-10 h-10 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-full flex items-center justify-center shadow-lg border border-slate-800 hover:scale-105 active:scale-95 transition-all z-20"
             title={isAtBottom ? "Scroll to Top" : "Scroll to Bottom"}
           >
             {isAtBottom ? <FaChevronUp className="text-sm" /> : <FaChevronDown className="text-sm" />}

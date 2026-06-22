@@ -456,9 +456,9 @@ function Incidents({ role, guardId: currentGuardId }) {
 
         {/* GUARD REPORTING FORM */}
         {role === "guard" && !showHistory && (
-          <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-red-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-700">Report New Incident</h2>
+          <div className="glass-card rounded-2xl p-5 md:p-8 mb-8 ring-1 ring-slate-200 shadow-sm bg-white md:bg-white/80">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-base font-bold text-slate-800 tracking-tight">Report New Incident</h2>
               <button 
                 onClick={() => setShowHistory(true)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition"
@@ -468,9 +468,9 @@ function Incidents({ role, guardId: currentGuardId }) {
             </div>
             {errors.general && <p className="text-red-500 mb-4 bg-red-50 p-3 rounded-lg text-sm">{errors.general}</p>}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-2">
               <div>
-                <label className="block text-sm text-gray-500 mb-1">Incident Type</label>
+                <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Incident Type</label>
                 <CustomSelect
                   value={incidentType}
                   onChange={val => { setIncidentType(val); clearError("incidentType"); }}
@@ -480,19 +480,19 @@ function Incidents({ role, guardId: currentGuardId }) {
                   ]}
                   placeholder="Select Incident Type"
                   error={!!errors.incidentType}
-                  heightClass="h-12"
+                  heightClass="h-11"
                 />
-                {errors.incidentType && <p className="text-red-500 text-sm mt-1">{errors.incidentType}</p>}
+                {errors.incidentType && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.incidentType}</p>}
               </div>
 
               <div className="md:col-span-2">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-sm text-gray-500">Description</label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-[11px] font-bold text-slate-655 uppercase tracking-wider mb-2">Description</label>
                   <button 
                     type="button" 
                     onClick={enhanceDescriptionWithAI} 
                     disabled={isEnhancing}
-                    className="text-xs px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-full shadow-sm font-semibold transition disabled:opacity-50 flex items-center gap-1.5 active:scale-95"
+                    className="text-[10px] px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-full shadow-sm font-semibold transition disabled:opacity-50 flex items-center gap-1.5 active:scale-95"
                   >
                     <span>✨</span> {isEnhancing ? "Enhancing..." : "AI Enhance"}
                   </button>
@@ -501,32 +501,37 @@ function Incidents({ role, guardId: currentGuardId }) {
                   placeholder="Describe the incident in detail... (Optional if media is provided)"
                   value={description}
                   onChange={(e) => { setDescription(e.target.value); clearError("description"); }}
-                  className={`w-full border p-3 rounded-lg focus:outline-none focus:ring-2 transition ${errors.description ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-red-300"}`}
+                  className={`w-full border px-3 py-2 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
+                    errors.description 
+                      ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
+                      : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                  }`}
                   rows="4"
                 />
-                {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
+                {errors.description && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.description}</p>}
               </div>
+            </div>
 
               {/* Media Uploads */}
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                 {/* Image Upload */}
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">📸 Attach Photo</label>
-                  <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                  {imagePreview && <img src={imagePreview} alt="Preview" className="mt-3 w-full max-h-32 object-cover rounded-lg border border-gray-200" />}
+                <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4">
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">📸 Attach Photo</label>
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs w-full file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                  {imagePreview && <img src={imagePreview} alt="Preview" className="mt-3 w-full max-h-32 object-cover rounded-xl border border-gray-200" />}
                 </div>
 
                 {/* Voice Upload */}
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">🎙️ Record Voice Note</label>
+                <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-center">
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">🎙️ Record Voice Note</label>
                   <button
                     type="button"
                     onClick={recording ? stopRecording : startRecording}
-                    className={`w-14 h-14 mx-auto rounded-full flex items-center justify-center text-2xl shadow-lg transition-all ${recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105"}`}
+                    className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center text-xl shadow-lg transition-all ${recording ? "bg-red-500 animate-pulse scale-110" : "bg-blue-600 hover:bg-blue-700 hover:scale-105 shadow-blue-150"}`}
                   >
                     {recording ? "⏹️" : "🎙️"}
                   </button>
-                  <p className="text-xs text-gray-500 mt-2">{recording ? "Recording… tap to stop" : "Tap mic to record"}</p>
+                  <p className="text-[10px] text-gray-500 mt-2">{recording ? "Recording… tap to stop" : "Tap mic to record"}</p>
                   {audioUrl && (
                     <div className="mt-3 flex flex-col items-center gap-2">
                       <audio src={audioUrl} controls className="w-full h-8" />
@@ -535,13 +540,12 @@ function Incidents({ role, guardId: currentGuardId }) {
                   )}
                 </div>
               </div>
-            </div>
 
             <button
               onClick={addIncident}
               disabled={loading}
-              className={`mt-5 px-6 py-3 rounded-lg text-white font-semibold transition ${
-                loading ? "bg-gray-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+              className={`mt-8 w-full md:w-auto px-6 py-3 rounded-xl text-white font-bold text-sm transition shadow-md ${
+                loading ? "bg-slate-300 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
               }`}
             >
               {loading ? "Reporting..." : "Report Incident"}
@@ -561,7 +565,7 @@ function Incidents({ role, guardId: currentGuardId }) {
                   ←
                 </button>
                 <div>
-                  <h2 className="font-bold text-gray-800 text-lg">Past Incidents</h2>
+                  <h2 className="font-bold text-gray-800 text-base">Past Incidents</h2>
                   <p className="text-xs text-gray-400 mt-0.5">Your reported incident history</p>
                 </div>
               </div>

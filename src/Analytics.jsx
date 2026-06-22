@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import { Bar, Pie, Line, Doughnut } from "react-chartjs-2";
+import { FaUserShield, FaMapMarkerAlt, FaCircle, FaCalendarAlt } from "react-icons/fa";
+import { GiSiren } from "react-icons/gi";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, Polygon, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -33,6 +35,7 @@ ChartJS.register(
   Legend
 );
 import CustomSelect from "./CustomSelect";
+import { useLanguage } from "./LanguageContext";
 
 // Helper for map zoom centering
 function ChangeMapView({ coords }) {
@@ -69,6 +72,7 @@ const waypointIcon = L.divIcon({
 
 function Analytics({ role, onNavigate }) {
   const { showToast, ToastContainer } = useToast();
+  const { t } = useLanguage();
 
   // Role restriction state
   const isAdmin = role === "admin";
@@ -668,11 +672,11 @@ function Analytics({ role, onNavigate }) {
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Viewing:</span>
               <span className="font-bold text-gray-800 text-sm">
-                {activeTab === "dashboard" && "📊 Summary Dashboard"}
-                {activeTab === "performance" && "🎖️ Performance Tracking"}
-                {activeTab === "patrol" && "🗺️ Patrol History Map"}
-                {activeTab === "attendance" && "📋 Attendance & Shift Logs"}
-                {activeTab === "incidents" && "🚨 Incident Reports"}
+                {activeTab === "dashboard" && `📊 ${t("summary_dashboard")}`}
+                {activeTab === "performance" && `🎖️ ${t("performance_tracking")}`}
+                {activeTab === "patrol" && `🗺️ ${t("patrol_history_map")}`}
+                {activeTab === "attendance" && `📋 ${t("attendance_shift_logs")}`}
+                {activeTab === "incidents" && `🚨 ${t("incident_reports")}`}
               </span>
             </div>
             <button
@@ -686,11 +690,11 @@ function Analytics({ role, onNavigate }) {
           {/* Tab buttons - hidden on mobile unless toggled */}
           <div className={`${mobileMenuOpen ? "flex" : "hidden"} md:flex flex-col md:flex-row flex-wrap justify-center items-center gap-2 bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 max-w-full md:max-w-fit mx-auto animate-fade-in`}>
             {[
-              { key: "dashboard", label: "📊 Summary Dashboard" },
-              { key: "performance", label: "🎖️ Performance Tracking" },
-              { key: "patrol", label: "🗺️ Patrol History Map" },
-              { key: "attendance", label: "📋 Attendance & Shift Logs" },
-              { key: "incidents", label: "🚨 Incident Reports" }
+              { key: "dashboard", label: `📊 ${t("summary_dashboard")}` },
+              { key: "performance", label: `🎖️ ${t("performance_tracking")}` },
+              { key: "patrol", label: `🗺️ ${t("patrol_history_map")}` },
+              { key: "attendance", label: `📋 ${t("attendance_shift_logs")}` },
+              { key: "incidents", label: `🚨 ${t("incident_reports")}` }
             ].map(tab => (
               <button
                 key={tab.key}
@@ -720,10 +724,12 @@ function Analytics({ role, onNavigate }) {
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Total Guards</p>
+                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">{t("total_guards")}</p>
                   <p className="text-3xl font-extrabold text-slate-800 mt-1">{totalGuards}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-blue-50/50 text-blue-600 flex items-center justify-center text-xl shadow-sm border border-blue-100/50">👮</div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50/50 text-blue-600 flex items-center justify-center text-xl shadow-sm border border-blue-100/50">
+                  <FaUserShield />
+                </div>
               </div>
             </div>
 
@@ -731,10 +737,12 @@ function Analytics({ role, onNavigate }) {
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Total Locations</p>
+                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">{t("total_locations")}</p>
                   <p className="text-3xl font-extrabold text-slate-800 mt-1">{totalLocations}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-rose-50/50 text-rose-600 flex items-center justify-center text-xl shadow-sm border border-rose-100/50">📍</div>
+                <div className="w-10 h-10 rounded-xl bg-rose-50/50 text-rose-600 flex items-center justify-center text-xl shadow-sm border border-rose-100/50">
+                  <FaMapMarkerAlt />
+                </div>
               </div>
             </div>
 
@@ -742,10 +750,12 @@ function Analytics({ role, onNavigate }) {
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Active Guards</p>
+                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">{t("active_guards")}</p>
                   <p className="text-3xl font-extrabold text-slate-800 mt-1">{activeGuards}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-50/50 text-emerald-600 flex items-center justify-center text-xl shadow-sm border border-emerald-100/50">🟢</div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50/50 text-emerald-600 flex items-center justify-center text-xl shadow-sm border border-emerald-100/50">
+                  <FaCircle className="text-[14px]" />
+                </div>
               </div>
             </div>
 
@@ -753,10 +763,12 @@ function Analytics({ role, onNavigate }) {
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Shifts Count</p>
+                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">{t("shifts_count")}</p>
                   <p className="text-3xl font-extrabold text-slate-800 mt-1">{totalShifts}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-indigo-50/50 text-indigo-600 flex items-center justify-center text-xl shadow-sm border border-indigo-100/50">🗓️</div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-50/50 text-indigo-600 flex items-center justify-center text-xl shadow-sm border border-indigo-100/50">
+                  <FaCalendarAlt />
+                </div>
               </div>
             </div>
 
@@ -764,10 +776,12 @@ function Analytics({ role, onNavigate }) {
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">Incidents Count</p>
+                  <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">{t("incidents_count")}</p>
                   <p className="text-3xl font-extrabold text-slate-800 mt-1">{totalIncidents}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-red-50/50 text-red-650 flex items-center justify-center text-xl shadow-sm border border-red-100/50">🚨</div>
+                <div className="w-10 h-10 rounded-xl bg-amber-50/50 text-amber-600 flex items-center justify-center text-2xl shadow-sm border border-amber-100/50">
+                  🚨
+                </div>
               </div>
             </div>
           </div>

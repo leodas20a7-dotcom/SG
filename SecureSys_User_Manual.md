@@ -13,9 +13,13 @@ You can access the SecureSys platform from any device (Desktop, Tablet, or Mobil
 * **Best Experience:** We recommend using a desktop browser for Administrators, and a mobile browser for Security Guards.
 
 ### How to Log In
-1. Navigate to the SecureSys login page.
-2. Enter your assigned **Email** and **Password**.
-3. Click **Sign In**. 
+**Logging into SecureSys**
+
+**Navigate to Login Page:** Open your web browser and go to the SecureSys login URL.
+
+**Enter Credentials:** Input your assigned **Email** and **Password** into the respective fields.
+
+**Sign In:** Click the **Sign In** button. 
 *(Note: The system automatically detects whether you are an Administrator or a Guard based on your credentials and routes you to the appropriate dashboard).*
 
 ---
@@ -32,22 +36,66 @@ Upon logging in, you will see the **Dashboard**. This gives you a bird's-eye vie
 
 ### 👥 Staff Registry
 This is where you manage your security personnel.
-* **Adding a Guard:** Click on "Staff Registry" > "Guard Profiles". Click **Add Guard**, fill in their details (Name, Email, Password, Assigned Location), and save. They can immediately use these credentials to log in.
-* **Managing Locations (Geofencing):** Go to the "Duty Locations" tab. Here you can set up specific sites (e.g., "Main Gate", "Warehouse"). You can set a GPS radius (Geofence) to ensure guards can only clock in when they are physically at the site.
+
+* **Adding a Guard:** 
+  
+  **Creating a New Guard Profile**
+  
+  **Navigate to Guard Profiles:** Click on the "Staff Registry" tab from the main menu, then select "Guard Profiles".
+  
+  **Add Guard:** Click the **Add Guard** button.
+  
+  **Fill Details:** Enter the required details for the new guard, including their Name, Email, Password, and Assigned Location.
+  
+  **Save Profile:** Click the **Save** button. The guard can immediately use these credentials to log in.
+
+* **Managing Locations (Geofencing):** Go to the "Duty Locations" tab. Here you can set up specific sites (e.g., "Main Gate", "Warehouse").
+  
+  **Adding a Duty Location in SecureSys**
+  
+  **Navigate to Duty Locations:** Click on the "Staff Registry" tab from the main menu, then select the "Duty Locations" sub-tab.
+  
+  **Add New Location:** Click the **Add Location** button. A form or dialog will open where you can specify:
+  
+  * **Location Name:** Give the site a specific name (e.g., "Main Gate", "Warehouse A").
+  * **Coordinates/Address:** Enter the physical address or pinpoint the exact location on the map.
+  * **Geofence Radius:** Select the allowed GPS radius (e.g., 50 meters, 100 meters) around the location to ensure guards can only clock in when physically present.
+  * **Status:** Select whether the location is currently active or inactive.
+  
+  **Save Location:** Click the **Save** button to finalize. The new duty location will now be available when assigning guards.
 
 ### 🗺️ Live Operations & Tracking Map
 Monitor your active guards in real-time.
-* Navigate to **Live Tracking**.
-* The interactive map will display live GPS pins of all active guards currently on duty. 
-* Guard locations automatically update every 5 minutes. You can also click **"Ping Now"** on a guard's profile to instantly refresh their location.
+
+**Tracking Guard Locations**
+
+**Navigate to Live Tracking:** Click on the **Live Tracking** tab from the main menu.
+
+**View Map:** The interactive map will load and display live GPS pins of all active guards currently on duty. Guard locations automatically update every 5 minutes.
+
+**Refresh Location:** Click **"Ping Now"** on a specific guard's profile card to instantly refresh and fetch their exact current location.
 
 ### 📋 Attendance & Shift Logs
-* View detailed records of when guards Checked In and Checked Out.
-* Review any **Correction Requests** submitted by guards (e.g., if they forgot to clock out, they can submit an audio note explaining the situation).
+Review detailed records of guard shifts.
+
+**Reviewing Shift Logs and Correction Requests**
+
+**Navigate to Attendance:** Click on the **Attendance & Shift Logs** tab.
+
+**View Records:** Browse the list to see detailed records of when guards Checked In and Checked Out.
+
+**Review Correction Requests:** Look for entries marked as Correction Requests (e.g., if a guard forgot to clock out). Click on the request to listen to the submitted audio note explaining the situation and approve or deny the correction.
 
 ### 🚨 Incident Reports
-* Review all workplace issues reported by guards from the field.
-* Incidents include the exact time, the guard's name, a text description, photo evidence, and playable **audio voice notes**.
+Review all workplace issues reported by guards from the field.
+
+**Reviewing an Incident Report**
+
+**Navigate to Incidents:** Click on the **Incident Reports** tab.
+
+**Select Report:** Click on a specific incident from the list to view its details.
+
+**Review Details:** Read the text description, view the uploaded photo evidence, and click the play button to listen to any attached **audio voice notes**. The exact time and guard's name will also be displayed.
 
 ---
 
@@ -56,35 +104,65 @@ Monitor your active guards in real-time.
 The mobile view is highly optimized for guards in the field, ensuring they can perform their duties with zero friction.
 
 ### Starting a Shift (Check-In)
-1. Log in using your Guard credentials.
-2. Go to the **Shift Control** tab.
-3. Your current location will be verified against the site's GPS Geofence.
-4. Click **Start Shift**. The system will log your exact time and location.
+**Clocking In for Duty**
+
+**Log In:** Log in to the mobile app using your Guard credentials.
+
+**Navigate to Shift Control:** Go to the **Shift Control** tab on the bottom navigation bar.
+
+**Verify Location:** Wait a moment as your current location is automatically verified against the site's GPS Geofence.
+
+**Start Shift:** Once verified, click the **Start Shift** button. The system will log your exact time and location.
 
 ### 🆘 Emergency SOS Alert
 In case of an emergency, guards have access to an SOS button.
-* Tap the red **Emergency SOS Alert** button on the home screen.
-* This immediately flags your status in the Admin dashboard and logs an emergency timestamp.
+
+**Triggering an SOS Alert**
+
+**Locate SOS Button:** Find the red **Emergency SOS Alert** button prominently displayed on the home screen.
+
+**Trigger Alert:** Tap the button.
+
+**Confirmation:** The system immediately flags your status in the Admin dashboard and logs an emergency timestamp.
 
 ### Reporting Incidents & Issues
 If a guard spots a security breach, damage, or hazard:
-1. Navigate to the **Incidents** tab.
-2. Select the type of incident (e.g., Security Breach, Maintenance).
-3. Type a brief description, **upload a photo** from the camera, or **record an audio voice note** by tapping the microphone icon.
-4. Submit the report. It instantly appears on the Admin's dashboard.
+
+**Submitting an Incident Report**
+
+**Navigate to Incidents:** Go to the **Incidents** tab from the bottom menu.
+
+**Select Incident Type:** Choose the appropriate category for the issue (e.g., Security Breach, Maintenance).
+
+**Provide Details:** Type a brief text description of the issue.
+
+**Add Media:** Tap the camera icon to **upload a photo**, or tap the microphone icon to **record an audio voice note**.
+
+**Submit:** Click the **Submit** button. The report instantly appears on the Admin's dashboard.
 
 ### 🌐 Multi-Language Support
 Guards can easily switch the app's language to their native tongue. 
-* Tap the globe icon in the top header.
-* Select from available languages (English, Hindi, Arabic, Tamil, etc.). All menus and buttons will instantly translate.
+
+**Changing the App Language**
+
+**Open Language Menu:** Tap the globe icon located in the top header of the app.
+
+**Select Language:** Choose your preferred language from the available list (English, Hindi, Arabic, Tamil, etc.).
+
+**Apply:** All menus and buttons will instantly translate to the selected language.
 
 ---
 
 ## 4. Support & Settings
 If you encounter any issues or need to reset system cache:
-* Navigate to the **Settings** menu (Admin only).
-* You can clear temporary storage or clean up old audio notes to free up database space.
-* For further technical assistance, please contact your IT administrator.
+
+**Clearing System Cache (Admin Only)**
+
+**Navigate to Settings:** Click on the **Settings** menu from the admin dashboard.
+
+**Select Cache Option:** Find the section for system maintenance and click on the option to clear temporary storage or clean up old audio notes.
+
+**Confirm:** Confirm the action to free up database space. For further technical assistance, contact your IT administrator.
 
 ---
 *Generated for SecureSys Platform*

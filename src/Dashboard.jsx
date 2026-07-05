@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { supabase } from "./lib/supabase";
-import Sidebar from "./Sidebar";
+import Sidebar, { ALL_NAV } from "./Sidebar";
 import { useToast } from "./Toast";
 import Notifications from "./Notifications";
 import { useLanguage } from "./LanguageContext";
 import ErrorBoundary from "./ErrorBoundary";
+import DarkModeToggle from "./DarkModeToggle";
 
 // Lazy-loaded subcomponents for improved performance and initial page load speed
 const StaffRegistry = React.lazy(() => import("./StaffRegistry"));
@@ -17,6 +18,12 @@ const SystemAccess = React.lazy(() => import("./SystemAccess"));
 const Analytics = React.lazy(() => import("./Analytics"));
 const Charts = React.lazy(() => import("./Charts"));
 const Settings = React.lazy(() => import("./Settings"));
+const Billing = React.lazy(() => import("./Billing"));
+const Shifts = React.lazy(() => import("./Shifts"));
+const PlatformAdminDashboard = React.lazy(() => import("./PlatformAdminDashboard"));
+const TenantManagement = React.lazy(() => import("./TenantManagement"));
+const GlobalBroadcasts = React.lazy(() => import("./GlobalBroadcasts"));
+const PlatformSettings = React.lazy(() => import("./PlatformSettings"));
 
 
 /* ─── Language Dropdown ───────────────────────────── */
@@ -82,10 +89,65 @@ function LanguageDropdown({ locale, setLocale }) {
   );
 }
 
-function Dashboard({ role, userGuardId }) {
+function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigate }) {
 
   const { t, locale, setLocale } = useLanguage();
-  const [page, setPage] = useState("dashboard");
+
+  // Ensure user has permission for the current page, redirect if not
+  useEffect(() => {
+    const navItem = ALL_NAV.find(n => n.key === page);
+    let isAllowed = true;
+    
+    // Check if page exists and user has role permission
+    if (!navItem) {
+      isAllowed = false;
+    } else if (!navItem.roles.includes(role)) {
+      isAllowed = false;
+    } 
+    // Check specific allowedPages restriction (for sub-admins)
+    else if (allowedPages && allowedPages.length > 0 && !allowedPages.includes(page)) {
+      isAllowed = false;
+    }
+
+    if (!isAllowed) {
+      let fallback = "dashboard";
+      if (allowedPages && allowedPages.length > 0) {
+        fallback = allowedPages[0];
+      } else {
+        const firstAllowedNav = ALL_NAV.find(n => n.roles.includes(role));
+        if (firstAllowedNav) fallback = firstAllowedNav.key;
+      }
+      onNavigate(fallback);
+    }
+  }, [page, role, allowedPages, onNavigate]);
+
+  // Sync page state to URL hash
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const currentHash = window.location.hash.replace('#', '');
+      if (currentHash !== page && page !== "login" && page !== "signup") {
+        window.history.pushState(null, '', `#${page}`);
+      }
+    }
+  }, [page]);
+
+  // Listen to browser Back/Forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        onNavigate(hash);
+      } else {
+        onNavigate(
+          allowedPages && allowedPages.length > 0 && !allowedPages.includes("dashboard")
+            ? allowedPages[0]
+            : "dashboard"
+        );
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [allowedPages, onNavigate]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sosAlert, setSosAlert] = useState(null);
   const { showToast, ToastContainer } = useToast();
@@ -96,6 +158,51 @@ function Dashboard({ role, userGuardId }) {
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
   const [voices, setVoices] = useState([]);
   const [showTourSettings, setShowTourSettings] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [globalBroadcast, setGlobalBroadcast] = useState(null);
+
+  useEffect(() => {
+    async function fetchCompanyName() {
+      if (!companyId) return;
+      try {
+        const { data } = await supabase.from('companies').select('name').eq('id', companyId).single();
+        if (data) setCompanyName(data.name);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    fetchCompanyName();
+
+    async function fetchBroadcast() {
+      try {
+        const { data } = await supabase.from('global_broadcasts').select('*').eq('active', true).order('created_at', { ascending: false }).limit(1);
+        if (data && data.length > 0) {
+          const broadcast = data[0];
+          const dismissedId = localStorage.getItem('sg_dismissed_broadcast');
+          if (dismissedId !== broadcast.id) {
+            setGlobalBroadcast(broadcast);
+          } else {
+            setGlobalBroadcast(null);
+          }
+        } else {
+          setGlobalBroadcast(null);
+        }
+      } catch (err) {
+        console.error("Error fetching broadcast", err);
+      }
+    }
+    fetchBroadcast();
+
+    // Setup realtime subscription for broadcasts so it appears instantly for active users
+    const broadcastSubscription = supabase.channel('public:global_broadcasts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'global_broadcasts' }, payload => {
+        fetchBroadcast();
+      }).subscribe();
+
+    return () => {
+      supabase.removeChannel(broadcastSubscription);
+    };
+  }, [companyId]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && 'speechSynthesis' in window) {
@@ -135,6 +242,50 @@ function Dashboard({ role, userGuardId }) {
       loadVoices();
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
+  }, []);
+
+  // Background Cleanup: Auto-delete old attendance photos
+  useEffect(() => {
+    async function cleanupOldPhotos() {
+      try {
+        // Fetch all files from the guard-photos bucket
+        const { data: files, error } = await supabase.storage.from("guard-photos").list("", { limit: 1000 });
+        if (error || !files || files.length === 0) return;
+
+        // Threshold: 30 days (30 * 24 * 60 * 60 * 1000 ms)
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const filesToRemove = [];
+
+        files.forEach(file => {
+          // skip internal placeholders
+          if (file.name === ".emptyFolderPlaceholder") return;
+          
+          const createdTime = new Date(file.created_at).getTime();
+          if (createdTime < thirtyDaysAgo) {
+            filesToRemove.push(file.name);
+          }
+        });
+
+        if (filesToRemove.length > 0) {
+          const { error: removeErr } = await supabase.storage.from("guard-photos").remove(filesToRemove);
+          if (removeErr) {
+            console.error("Storage removal error:", removeErr);
+            if (typeof window !== "undefined") {
+              window.alert("Storage deletion failed. Error: " + removeErr.message + " (This might be a missing DELETE policy in Supabase Storage)");
+            }
+          } else {
+            console.log(`Cleaned up ${filesToRemove.length} old photos directly from the storage bucket.`);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to cleanup old photos:", err);
+      }
+    }
+
+    // Run cleanup once on dashboard load, and then every 24 hours
+    cleanupOldPhotos();
+    const intervalId = setInterval(cleanupOldPhotos, 24 * 60 * 60 * 1000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const tourSteps = [
@@ -184,6 +335,18 @@ function Dashboard({ role, userGuardId }) {
       text: "Under the Shift Locations tab, you can set site boundaries, coordinates, and geofence radius limits."
     },
     {
+      title: "Roster & Shift Planning",
+      page: "shifts",
+      selector: ".tour-shifts-target",
+      text: "The Shifts section allows you to schedule guard assignments, plan rosters, and track coverage across multiple locations."
+    },
+    {
+      title: "System Access Control",
+      page: "system-users",
+      selector: ".tour-access-target",
+      text: "System Access lets you manage sub-admin accounts, set up their credentials, and control their specific dashboard permissions."
+    },
+    {
       title: "Incident Reports",
       page: "incidents",
       selector: ".tour-incidents-target",
@@ -194,6 +357,18 @@ function Dashboard({ role, userGuardId }) {
       page: "circulars",
       selector: ".tour-circulars-target",
       text: "Under Circulars, you can write messages that pop up immediately on every active guard's mobile screen."
+    },
+    {
+      title: "Leave & Request Management",
+      page: "correction-requests",
+      selector: ".tour-requests-target",
+      text: "In the Requests tab, you can quickly review, approve, or reject time-off requests submitted by your staff."
+    },
+    {
+      title: "Billing & Subscriptions",
+      page: "billing",
+      selector: ".tour-billing-target",
+      text: "The Billing page provides a secure interface to update credit cards, purchase additional guard seats, and check your next invoice date."
     },
     {
       title: "System Settings",
@@ -213,7 +388,7 @@ function Dashboard({ role, userGuardId }) {
     
     // Auto navigation to matching page
     if (page !== currentStep.page) {
-      setPage(currentStep.page);
+      onNavigate(currentStep.page);
     }
 
     // Speech Synthesis
@@ -326,6 +501,68 @@ function Dashboard({ role, userGuardId }) {
     };
   }, [role]);
 
+  // Auto-cleanup old attendance photos for admins
+  useEffect(() => {
+    if (!role || (role !== "admin" && role !== "super_admin" && role !== "platform_admin")) return;
+
+    const cleanupOldPhotos = async () => {
+      try {
+        const oneMinuteAgo = new Date();
+        oneMinuteAgo.setMinutes(oneMinuteAgo.getMinutes() - 1);
+        const isoString = oneMinuteAgo.toISOString();
+
+        // 1. Fetch old attendance records with photos
+        const { data: oldRecords, error: fetchErr } = await supabase
+          .from("attendance")
+          .select("id, check_in_photo, check_out_photo")
+          .lt("check_in_time", isoString)
+          .or("check_in_photo.not.is.null,check_out_photo.not.is.null")
+          .limit(100);
+
+        if (fetchErr) throw fetchErr;
+        if (!oldRecords || oldRecords.length === 0) {
+          sessionStorage.setItem("sg_photos_cleaned", "true");
+          return;
+        }
+
+        const filesToDelete = [];
+        const recordIds = [];
+
+        oldRecords.forEach(rec => {
+          recordIds.push(rec.id);
+          if (rec.check_in_photo) {
+            const parts = rec.check_in_photo.split('/');
+            filesToDelete.push(parts[parts.length - 1]);
+          }
+          if (rec.check_out_photo) {
+            const parts = rec.check_out_photo.split('/');
+            filesToDelete.push(parts[parts.length - 1]);
+          }
+        });
+
+        if (filesToDelete.length > 0) {
+          const { error: delErr } = await supabase.storage.from("guard-photos").remove(filesToDelete);
+          if (delErr) console.warn("Background photo cleanup storage error:", delErr);
+        }
+
+        if (recordIds.length > 0) {
+          const { error: updateErr } = await supabase
+            .from("attendance")
+            .update({ check_in_photo: null, check_out_photo: null })
+            .in("id", recordIds);
+          if (updateErr) console.warn("Background photo cleanup DB error:", updateErr);
+        }
+
+        sessionStorage.setItem("sg_photos_cleaned", "true");
+        console.log(`Auto-cleaned ${filesToDelete.length} old photos in the background.`);
+      } catch (err) {
+        console.warn("Failed background photo cleanup:", err);
+      }
+    };
+
+    cleanupOldPhotos();
+  }, [role]);
+
   async function acknowledgeSos() {
     if (!sosAlert) return;
     try {
@@ -358,11 +595,44 @@ function Dashboard({ role, userGuardId }) {
         <div className="glowing-orb-1" />
         <div className="glowing-orb-2" />
 
-        <Sidebar role={role} page={page} onNavigate={setPage} onLogout={handleLogout} isOpen={sidebarOpen} onOpen={() => setSidebarOpen(true)} onClose={() => setSidebarOpen(false)} />
+        <Sidebar role={role} page={page} onNavigate={onNavigate} onLogout={handleLogout} isOpen={sidebarOpen} onOpen={() => setSidebarOpen(true)} onClose={() => setSidebarOpen(false)} allowedPages={allowedPages} />
 
         <div className="flex-1 p-4 md:p-8 overflow-y-auto h-full relative z-10">
+          
+          {/* Global Broadcast Banner */}
+          {globalBroadcast && (
+            <div className={`mb-6 rounded-2xl p-4 shadow-sm border animate-fade-in flex items-start gap-4 ${
+              globalBroadcast.type === 'critical' ? 'bg-red-600 border-red-700 text-white' :
+              globalBroadcast.type === 'warning' ? 'bg-amber-100 border-amber-300 text-amber-900' :
+              'bg-blue-600 border-blue-700 text-white'
+            }`}>
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl shrink-0">
+                {globalBroadcast.type === 'critical' ? '🚨' : globalBroadcast.type === 'warning' ? '⚠️' : '📢'}
+              </div>
+              <div className="flex-1 pt-0.5">
+                <h3 className="font-bold text-sm uppercase tracking-wider opacity-90 mb-1">
+                  Global Announcement
+                </h3>
+                <p className="font-medium text-sm md:text-base leading-relaxed">
+                  {globalBroadcast.message}
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  if (globalBroadcast) {
+                    localStorage.setItem('sg_dismissed_broadcast', globalBroadcast.id);
+                  }
+                  setGlobalBroadcast(null);
+                }}
+                className="opacity-60 hover:opacity-100 transition p-1 rounded hover:bg-black/10"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Top Bar Header with Premium Glassmorphism */}
-          <div className="glass-header rounded-2xl p-4 md:p-5 mb-8 relative z-[100] shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+          <div className="glass-header rounded-2xl p-4 md:p-5 mb-8 relative z-40 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
             <div className="flex justify-between items-center gap-3">
               <div className="flex items-center gap-3">
                 {/* Mobile hamburger - inside the card, aligned with title */}
@@ -377,13 +647,15 @@ function Dashboard({ role, userGuardId }) {
                 <div>
                   <h1 className="text-xl md:text-2xl.5 font-extrabold text-slate-800 tracking-tight capitalize leading-tight">{t(page)}</h1>
                   <p className="text-[11px] md:text-sm text-slate-450 mt-0.5 font-medium">
+                    {companyName && <span className="font-bold text-slate-600">{companyName} • </span>}
                     {t("logged_in_as")}: <span className="font-semibold capitalize text-indigo-650">{role || "user"}</span>
                   </p>
                 </div>
               </div>
               <div className="flex items-center shrink-0 gap-2.5 md:gap-3">
+                <DarkModeToggle />
                 <LanguageDropdown locale={locale} setLocale={setLocale} />
-                <Notifications role={role} onNavigate={setPage} />
+                <Notifications role={role} companyId={companyId} onNavigate={onNavigate} />
                 <button
                   onClick={handleLogout}
                   className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl bg-red-50/80 text-red-600 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-sm hover:scale-105 active:scale-95 hover:shadow-md hover:shadow-red-200"
@@ -395,7 +667,7 @@ function Dashboard({ role, userGuardId }) {
             </div>
           </div>
 
-          <ErrorBoundary>
+          <ErrorBoundary key={page}>
             <Suspense fallback={
               <div className="flex flex-col items-center justify-center py-20 text-slate-500 font-semibold gap-3 animate-fade-in">
                 <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
@@ -404,29 +676,45 @@ function Dashboard({ role, userGuardId }) {
             }>
               {page === "dashboard" && (
                 <div className="tour-analytics-target w-full animate-fade-in">
-                  <Analytics role={role} onNavigate={setPage} />
-                  {role !== "admin" && <Charts />}
+                  {role === "platform_admin" ? (
+                    <PlatformAdminDashboard />
+                  ) : (
+                    <>
+                      <Analytics role={role} onNavigate={onNavigate} companyId={companyId} />
+                      {role !== "admin" && <Charts companyId={companyId} />}
+                    </>
+                  )}
                 </div>
+              )}
+              {page === "tenant-management" && role === "platform_admin" && (
+                <TenantManagement />
+              )}
+              {page === "global-broadcasts" && role === "platform_admin" && (
+                <GlobalBroadcasts />
               )}
               {page === "live-ops" && (
                 <div className="tour-liveops-target w-full">
-                  <LiveOps role={role} tourView={tourStep !== null && tourSteps[tourStep]?.page === "live-ops" ? tourSteps[tourStep]?.tourView : null} />
+                  <LiveOps role={role} companyId={companyId} tourView={tourStep !== null && tourSteps[tourStep]?.page === "live-ops" ? tourSteps[tourStep]?.tourView : null} />
                 </div>
               )}
-              {page === "staff-registry" && role === "admin" && (
+              {page === "staff-registry" && (role === "admin" || role === "super_admin") && (
                 <div className="tour-staff-target w-full">
                   <StaffRegistry 
                     tourTab={tourStep !== null && tourSteps[tourStep]?.page === "staff-registry" ? tourSteps[tourStep]?.tourTab : null} 
-                    onNavigate={setPage}
+                    onNavigate={onNavigate}
+                    companyId={companyId}
                   />
                 </div>
               )}
-              {page === "guard-profiles" && (role === "admin" || role === "supervisor") && <GuardProfiles />}
-              {page === "system-users" && role === "admin" && <SystemAccess />}
-              {page === "incidents" && <div className="tour-incidents-target w-full"><Incidents role={role} /></div>}
-              {page === "circulars" && <div className="tour-circulars-target w-full"><Circulars role={role} userGuardId={userGuardId} /></div>}
-              {page === "correction-requests" && <CorrectionRequests role={role} />}
-              {page === "settings" && role === "admin" && <div className="tour-settings-target w-full"><Settings onStartTour={() => setTourStep(0)} /></div>}
+              {page === "guard-profiles" && (role === "admin" || role === "supervisor" || role === "super_admin") && <GuardProfiles companyId={companyId} />}
+              {page === "shifts" && (role === "admin" || role === "supervisor" || role === "super_admin") && <div className="tour-shifts-target w-full"><Shifts companyId={companyId} onNavigate={onNavigate} /></div>}
+              {page === "system-users" && (role === "admin" || role === "super_admin") && <div className="tour-access-target w-full"><SystemAccess companyId={companyId} /></div>}
+              {page === "incidents" && <div className="tour-incidents-target w-full"><Incidents role={role} companyId={companyId} currentGuardId={userGuardId} /></div>}
+              {page === "circulars" && <div className="tour-circulars-target w-full"><Circulars role={role} userGuardId={userGuardId} companyId={companyId} /></div>}
+              {page === "correction-requests" && <div className="tour-requests-target w-full"><CorrectionRequests role={role} companyId={companyId} guardId={userGuardId} onNavigate={onNavigate} /></div>}
+              {page === "billing" && (role === "admin" || role === "super_admin") && <div className="tour-billing-target w-full"><Billing companyId={companyId} /></div>}
+              {page === "settings" && (role === "admin" || role === "super_admin") && <Settings onStartTour={() => setTourStep(0)} />}
+              {page === "settings" && role === "platform_admin" && <PlatformSettings />}
             </Suspense>
           </ErrorBoundary>
         </div>

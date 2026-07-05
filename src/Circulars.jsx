@@ -4,10 +4,11 @@ import { useToast } from "./Toast";
 import LoadingOverlay from "./LoadingOverlay";
 import ConfirmModal from "./ConfirmModal";
 
-function Circulars({ role, userGuardId }) {
+function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
   const [circulars, setCirculars] = useState([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [companyId, setCompanyId] = useState(adminCompanyId || null);
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const { showToast, ToastContainer } = useToast();
@@ -27,13 +28,12 @@ function Circulars({ role, userGuardId }) {
         .select("*")
         .order("created_at", { ascending: false });
 
-      // Non-admin users: show broadcast circulars OR circulars targeted to them
-      if (role !== "admin") {
-        if (userGuardId) {
-          query = query.or(`is_broadcast.eq.true,guard_id.eq.${userGuardId}`);
-        } else {
-          query = query.eq("is_broadcast", true);
-        }
+      if (role === "guard" && userGuardId) {
+        query = query.or(`is_broadcast.eq.true,guard_id.eq.${userGuardId}`);
+      } else if (["admin", "super_admin", "supervisor"].includes(role) && adminCompanyId) {
+        query = query.eq("company_id", adminCompanyId);
+      } else if (role === "platform_admin") {
+        // Platform admin sees all, no filter needed
       }
 
       const { data } = await query;
@@ -52,12 +52,19 @@ function Circulars({ role, userGuardId }) {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      let finalCompanyId = companyId;
+      if (!finalCompanyId && userGuardId) {
+        const { data: g } = await supabase.from("guards").select("company_id").eq("id", userGuardId).single();
+        finalCompanyId = g?.company_id;
+      }
+      
       const { error } = await supabase.from("circulars").insert([
         {
           title: title.trim(),
           content: content.trim(),
           created_by: user?.id,
           is_broadcast: true,
+          company_id: finalCompanyId,
         },
       ]);
       if (error) throw error;

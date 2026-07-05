@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 import Login from "./Login";
+import Signup from "./Signup";
 import Dashboard from "./Dashboard";
+import { setCompanyTimezone } from "./lib/timeUtils";
 import GuardDuty from "./GuardDuty";
 import { ErrorBoundary } from "react-error-boundary";
+
+import { App as CapacitorApp } from '@capacitor/app';
 
 function ErrorFallback({ error }) {
   return (
@@ -23,9 +27,47 @@ function ErrorFallback({ error }) {
 function App() {
 
   const [session, setSession] = useState(null);
+  const [currentView, setCurrentView] = useState("login");
+  const [history, setHistory] = useState([]);
+
+  const openPage = (nextPage) => {
+    setHistory(prev => [...prev, currentView]);
+    setCurrentView(nextPage);
+  };
+
+  useEffect(() => {
+    const handleBackButton = () => {
+      setHistory(prev => {
+        if (prev.length > 0) {
+          const previous = prev[prev.length - 1];
+          setCurrentView(previous);
+          return prev.slice(0, -1);
+        } else {
+          CapacitorApp.exitApp();
+          return prev;
+        }
+      });
+    };
+
+    let listener;
+    CapacitorApp.addListener("backButton", handleBackButton).then(l => {
+      listener = l;
+    }).catch(err => {
+      console.warn("Capacitor App plugin not available", err);
+    });
+
+    return () => {
+      if (listener) {
+        listener.remove();
+      }
+    };
+  }, []);
+
   const [role, setRole] = useState("");
+  const [allowedPages, setAllowedPages] = useState(null);
   const [guardId, setGuardId] = useState(null);
   const [guardName, setGuardName] = useState("");
+  const [companyId, setCompanyId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [permissionsGranted, setPermissionsGranted] = useState(
@@ -103,33 +145,95 @@ function App() {
     }
   }
 
+  const [profileError, setProfileError] = useState(false);
+  const [subscriptionExpired, setSubscriptionExpired] = useState(false);
+
   async function fetchRole(userId) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, full_name")
-      .eq("id", userId)
-      .maybeSingle();
-      
-    if (profile) {
-      setRole(profile.role);
-      if (profile.role === "guard") {
-        const { data: guard } = await supabase
-          .from("guards")
-          .select("id, name")
-          .eq("auth_user_id", userId)
-          .maybeSingle();
-        if (guard) {
-          setGuardId(guard.id);
-          setGuardName(guard.name);
+    try {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (profile) {
+        setRole(profile.role);
+        setAllowedPages(profile.allowed_pages || null);
+        setCompanyId(profile.company_id);
+        
+        // Check company subscription and timezone
+        if (profile.company_id) {
+           const { data: comp } = await supabase.from("companies").select("current_period_end, timezone").eq("id", profile.company_id).single();
+           if (comp?.timezone) {
+               setCompanyTimezone(comp.timezone);
+           }
+           if (comp?.current_period_end) {
+              const expireDate = new Date(comp.current_period_end);
+              if (new Date() > expireDate) {
+                 setSubscriptionExpired(true);
+              }
+           }
         }
+
+        if (profile.role === "guard") {
+          const { data: guardsList, error: guardErr } = await supabase
+            .from("guards")
+            .select("id, name, auth_user_id, company_id")
+            .eq("auth_user_id", userId)
+            .limit(1);
+          
+          const guard = guardsList && guardsList.length > 0 ? guardsList[0] : null;
+
+          if (guard) {
+            setGuardId(guard.id);
+            setGuardName(guard.name);
+          } else {
+            // Auto-heal: If the guard row is missing (e.g. race condition during signup), recreate it.
+            const { data: newGuard, error: insErr } = await supabase.from("guards").insert([{
+              company_id: profile.company_id,
+              name: profile.name || (session?.user?.email ? session.user.email.split('@')[0] : "Guard"),
+              email: session?.user?.email || `temp-${Date.now()}@example.com`,
+              auth_user_id: userId
+            }]).select();
+            
+            if (newGuard && newGuard.length > 0) {
+              setGuardId(newGuard[0].id);
+              setGuardName(newGuard[0].name);
+            } else {
+              alert(`CRITICAL ERROR AUTO-HEALING GUARD:
+UserId: ${userId}
+Error: ${JSON.stringify(insErr)}
+Profile: ${JSON.stringify(profile)}`);
+            }
+          }
+        } else {
+            // Initialize Dashboard View
+            let startPage = "dashboard";
+            if (typeof window !== "undefined") {
+              const hash = window.location.hash.replace('#', '');
+              const validPages = ["dashboard", "tenant-management", "global-broadcasts", "live-ops", "staff-registry", "guard-profiles", "shifts", "system-users", "incidents", "circulars", "correction-requests", "billing", "settings"];
+              
+              if (hash && validPages.includes(hash)) {
+                startPage = hash;
+              } else if (window.location.search.includes("checkout=")) {
+                startPage = "billing";
+              } else if (profile.allowed_pages && profile.allowed_pages.length > 0 && !profile.allowed_pages.includes("dashboard")) {
+                startPage = profile.allowed_pages[0];
+              }
+            }
+            setCurrentView(startPage);
+            setHistory([]);
+        }
+      } else {
+        console.error("Profile not found for user", userId, error);
+        setProfileError(true);
       }
-    } else {
-      // Profile deleted or not found -> invalidate session
-      await supabase.auth.signOut();
-      setSession(null);
-      setRole("");
+    } catch (err) {
+      alert("App.jsx crash inside fetchRole: " + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -145,6 +249,9 @@ function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (sessionStorage.getItem("ignore_auth_change") === "true") {
+        return;
+      }
       setSession(session);
       if (session?.user) {
         setLoading(true);
@@ -178,7 +285,71 @@ function App() {
     );
   }
 
-  if (!session) return <Login setSession={setSession} />;
+  if (profileError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+            ⚠️
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">Profile Setup Incomplete</h2>
+          <p className="text-gray-600 mb-6 text-sm">
+            Your user account was created, but your profile and company were not automatically set up. 
+            This usually happens if the database triggers were not applied.
+          </p>
+          <div className="space-y-3">
+            <button 
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setProfileError(false);
+                setSession(null);
+                openPage("login");
+              }} 
+              className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition"
+            >
+              Sign Out & Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (subscriptionExpired && role === "guard") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border-t-4 border-red-500">
+          <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+            🛑
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">Subscription Expired</h2>
+          <p className="text-gray-600 mb-6 text-sm">
+            Your company's SecureSys subscription has expired. Please contact your administrator to renew the license.
+          </p>
+          <div className="space-y-3">
+            <button 
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setSubscriptionExpired(false);
+                setSession(null);
+                openPage("login");
+              }} 
+              className="w-full px-4 py-3 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl font-bold transition"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    if (currentView === "signup") {
+      return <Signup setSession={setSession} onNavigateToLogin={() => openPage("login")} />;
+    }
+    return <Login setSession={setSession} onNavigateToSignup={() => openPage("signup")} />;
+  }
 
   if (!permissionsGranted) {
     return (
@@ -256,14 +427,15 @@ function App() {
   if (role === "guard" && guardId) {
     return (
       <ErrorBoundary FallbackComponent={ErrorFallback}>
-        <GuardDuty guardId={guardId} guardName={guardName} />
+        <GuardDuty guardId={guardId} guardName={guardName} companyId={companyId} />
       </ErrorBoundary>
     );
   }
 
+
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Dashboard role={role} userGuardId={guardId} />
+      <Dashboard role={role} userGuardId={guardId} companyId={companyId} allowedPages={allowedPages} page={currentView} onNavigate={openPage} />
     </ErrorBoundary>
   );
 }

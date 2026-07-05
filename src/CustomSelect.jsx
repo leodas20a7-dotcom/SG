@@ -1,18 +1,25 @@
 import { useState, useEffect, useRef } from "react";
+import { FaSearch } from "react-icons/fa";
 
-function CustomSelect({ value, onChange, options, placeholder = "Select option", className = "", error = false, heightClass = "h-11" }) {
+function CustomSelect({ value, onChange, options, placeholder = "Select option", className = "", error = false, heightClass = "h-11", searchable = false }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const containerRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
         setIsOpen(false);
+        setSearchTerm("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const filteredOptions = searchable 
+    ? options.filter(opt => opt.label.toLowerCase().includes(searchTerm.toLowerCase()))
+    : options;
 
   const selectedOption = options.find(o => String(o.value) === String(value));
 
@@ -49,9 +56,27 @@ function CustomSelect({ value, onChange, options, placeholder = "Select option",
 
       {/* Dropdown Options List */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-y-auto max-h-60 z-[1001] py-1">
-          {options.map((opt) => {
-            const isSelected = String(opt.value) === String(value);
+        <div className={`absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] border border-gray-100 overflow-y-auto max-h-60 z-[1001] pb-1 flex flex-col ${!searchable ? 'pt-1' : ''}`}>
+          {searchable && (
+            <div className="px-3 py-2 sticky top-0 bg-white border-b border-slate-100 z-10">
+              <div className="relative">
+                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border-transparent rounded-lg bg-slate-100 focus:bg-slate-200 focus:border-transparent focus:ring-0 outline-none transition-colors"
+                />
+              </div>
+            </div>
+          )}
+          {filteredOptions.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-gray-500 text-center">No options found</div>
+          ) : (
+            filteredOptions.map((opt) => {
+              const isSelected = String(opt.value) === String(value);
             return (
               <button
                 key={opt.value}
@@ -69,7 +94,8 @@ function CustomSelect({ value, onChange, options, placeholder = "Select option",
                 {opt.label}
               </button>
             );
-          })}
+          })
+          )}
         </div>
       )}
     </div>

@@ -2,8 +2,17 @@ import { useEffect, useState } from "react";
 import MapView from "./MapView";
 import Attendance from "./Attendance";
 
-function LiveOps({ role, tourView }) {
-  const [view, setView] = useState("map"); // "map" or "checkin"
+function LiveOps({ role, tourView, companyId }) {
+  const [view, setView] = useState(() => {
+    const savedView = typeof window !== "undefined" ? sessionStorage.getItem("liveops_view") : null;
+    return savedView || "map";
+  }); // "map" or "checkin"
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("liveops_view");
+    }
+  }, []);
 
   useEffect(() => {
     if (tourView) {
@@ -41,9 +50,9 @@ function LiveOps({ role, tourView }) {
 
       <div className="animate-fade-in">
         {view === "map" ? (
-          <MapView />
+          <MapView companyId={companyId} />
         ) : (
-          <Attendance role={role} />
+          <Attendance role={role} companyId={companyId} />
         )}
       </div>
     </div>

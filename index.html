@@ -9,7 +9,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="description" content="SecureSys - Premium enterprise security management platform for real-time monitoring and workforce management." />
     <meta name="theme-color" content="#1A1F2C" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>SecureSys Platform</title>
+    <script>
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

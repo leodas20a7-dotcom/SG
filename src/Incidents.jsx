@@ -4,15 +4,17 @@ import { useToast } from "./Toast";
 import { addToQueue, getCached, setCached } from "./lib/offlineDb";
 import LoadingOverlay from "./LoadingOverlay";
 import CustomSelect from "./CustomSelect";
+import { shortId } from "./lib/shortId";
 
 const INCIDENT_TYPES = ["Theft", "Fire", "Fight", "Suspicious Activity", "Emergency", "Visitor Issue", "Others"];
 const STATUS_OPTIONS = ["Open", "Investigating", "Closed"];
 
-function Incidents({ role, guardId: currentGuardId }) {
+function Incidents({ role, currentGuardId, companyId: adminCompanyId }) {
 
   const [incidents, setIncidents] = useState([]);
   const [incidentType, setIncidentType] = useState("");
   const [description, setDescription] = useState("");
+  const [companyId, setCompanyId] = useState(adminCompanyId || null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -64,10 +66,15 @@ function Incidents({ role, guardId: currentGuardId }) {
       let query = supabase
         .from("incidents")
         .select(`*, guards(name)`)
-        .order("id", { ascending: false });
+        .order("id", { ascending: false })
+        .limit(1500);
 
       if (role === "guard" && currentGuardId) {
         query = query.eq("guard_id", currentGuardId);
+      } else if (["admin", "super_admin", "supervisor"].includes(role) && adminCompanyId) {
+        query = query.eq("company_id", adminCompanyId);
+      } else if (role === "platform_admin") {
+        // Platform admin sees all, no filter needed
       }
 
       const { data } = await query;
@@ -79,6 +86,15 @@ function Incidents({ role, guardId: currentGuardId }) {
       else showToast("Could not load incidents.", "error");
     }
   }
+
+  useEffect(() => {
+    fetchIncidents();
+    // Fetch company_id for the guard
+    if (currentGuardId) {
+      supabase.from("guards").select("company_id").eq("id", currentGuardId).single()
+        .then(({ data }) => { if (data) setCompanyId(data.company_id); });
+    }
+  }, [currentGuardId, role]);
 
   function validate() {
     const errs = {};
@@ -152,21 +168,41 @@ function Incidents({ role, guardId: currentGuardId }) {
         }
       }
 
+      let finalCompanyId = companyId;
+      if (!finalCompanyId && currentGuardId) {
+        const { data: g } = await supabase.from("guards").select("company_id").eq("id", currentGuardId).single();
+        finalCompanyId = g?.company_id;
+      }
+
       const { error } = await supabase.from("incidents").insert([
         {
           guard_id: currentGuardId,
+          company_id: finalCompanyId,
           incident_type: incidentType,
           description: description.trim() || "Reported with media",
           image_url: finalImageUrl,
           audio_url: finalAudioUrl,
-          incident_status: "Open", // Always starts as Open
+          incident_status: "Open",
         },
       ]);
 
       if (error) {
-        showToast("Error reporting incident. Please try again.", "error");
+        console.error("Incident insert error:", JSON.stringify(error, null, 2));
+        showToast(`Error reporting incident: ${error.message || error.code}`, "error");
         return;
       }
+
+      // Generate notification for Admins
+      const { error: notifErr } = await supabase.from("notifications").insert([{
+        user_role: "super_admin",
+        company_id: finalCompanyId,
+        guard_id: currentGuardId,
+        title: `🚨 New Incident: ${incidentType}`,
+        message: description.trim() || "Reported with media",
+        type: "error",
+        is_read: false
+      }]);
+      if (notifErr) console.error("Notification insert error:", notifErr);
 
       showToast("Incident reported successfully!", "success");
       setIncidentType(""); setDescription("");
@@ -224,7 +260,7 @@ function Incidents({ role, guardId: currentGuardId }) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Incident Report - ${incident.id}</title>
+          <title>Incident Report - ${shortId(incident.id)}</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
             body { 
@@ -352,7 +388,7 @@ function Incidents({ role, guardId: currentGuardId }) {
           <div class="grid-meta">
             <div class="meta-item">
               <span class="meta-label">Incident ID</span>
-              <span class="meta-value">#${incident.id}</span>
+              <span class="meta-value">${shortId(incident.id)}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Date & Time</span>
@@ -440,9 +476,7 @@ function Incidents({ role, guardId: currentGuardId }) {
     setImagePreview(URL.createObjectURL(file));
   }
 
-  useEffect(() => {
-    fetchIncidents();
-  }, [role, currentGuardId]);
+
 
   function clearError(field) {
     setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -610,6 +644,7 @@ function Incidents({ role, guardId: currentGuardId }) {
                         <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">
                           🕐 {new Date(incident.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
                         </span>
+                        <span className="text-[10px] font-mono font-bold text-gray-300 ml-1">{shortId(incident.id)}</span>
                       </div>
 
                       {/* Description */}

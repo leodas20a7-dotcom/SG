@@ -2,10 +2,11 @@ import { useState, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import LoadingOverlay from "./LoadingOverlay";
+import DarkModeToggle from "./DarkModeToggle";
 
 import { FaEnvelope, FaLock, FaArrowRight, FaShieldAlt, FaEye, FaEyeSlash, FaCheckCircle } from "react-icons/fa";
 
-function Login({ setSession }) {
+function Login({ setSession, onNavigateToSignup }) {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -106,9 +107,18 @@ function Login({ setSession }) {
         .animate-slide-up {
           animation: slideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
+        @keyframes shine {
+          100% { transform: translateX(100%); }
+        }
+        .animate-shine {
+          animation: shine 1.5s ease-in-out infinite;
+        }
       `}</style>
 
-      <div className="h-[100dvh] overflow-hidden flex flex-col md:flex-row bg-gradient-to-br from-[#11141e] via-[#1A1F2C] to-[#2a1b42] md:bg-none md:bg-white relative">
+      <div className="h-[100dvh] overflow-hidden flex flex-col md:flex-row bg-gradient-to-br from-[#11141e] via-[#1A1F2C] to-[#2a1b42] md:bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] md:from-indigo-50/50 md:via-slate-50 md:to-white dark:md:from-indigo-900/20 dark:md:via-slate-900 dark:md:to-slate-900 relative">
+        <div className="absolute top-6 right-6 md:top-8 md:right-8 z-50 hidden md:flex items-center justify-center p-1.5 rounded-full bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border border-white/40 dark:border-slate-700/50 shadow-sm hover:scale-105 transition-transform duration-300">
+          <DarkModeToggle />
+        </div>
 
         {/* Floating Security Elements (Mobile Background) */}
         <div className="md:hidden absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -125,8 +135,8 @@ function Login({ setSession }) {
             <div className="w-24 h-24 rounded-full bg-purple-500/30 blur-[40px] absolute top-12"></div>
           </div>
           <div className="flex flex-col items-center justify-center relative z-20">
-            <div className="w-16 h-16 rounded-[1.25rem] overflow-hidden bg-white shadow-xl shadow-black/10 flex items-center justify-center mb-3 p-1">
-              <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover rounded-[0.8rem]" />
+            <div className="w-16 h-16 rounded-[1.25rem] overflow-hidden bg-white shadow-[0_0_25px_rgba(99,102,241,0.5)] flex items-center justify-center mb-3 p-1 relative z-20 before:absolute before:inset-0 before:rounded-[1.25rem] before:shadow-[0_0_15px_rgba(99,102,241,0.8)] before:animate-pulse">
+              <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover rounded-[0.8rem] relative z-10" />
             </div>
             <h2 className="text-[22px] font-bold text-white tracking-widest">SecureSys</h2>
           </div>
@@ -192,7 +202,7 @@ function Login({ setSession }) {
 
         {/* Right Side: Login Form */}
         <div 
-          className={`flex-1 md:flex flex-col justify-center px-6 pt-6 pb-6 md:p-16 md:bg-slate-50 bg-white rounded-t-[40px] md:rounded-none absolute md:relative bottom-0 left-0 w-full z-20 shadow-[0_-15px_40px_rgba(0,0,0,0.2)] md:shadow-none animate-slide-up border-t border-white/40 md:border-none transition-transform duration-500 ease-in-out max-md:h-[calc(100dvh-190px)] md:h-full md:translate-y-0 ${isMobileFormCollapsed ? "max-md:translate-y-[65%]" : "max-md:translate-y-0"}`}
+          className={`flex-1 md:flex flex-col justify-center px-6 pt-6 pb-6 md:p-16 md:bg-slate-50 dark:md:bg-slate-900 bg-white dark:bg-slate-800 rounded-t-[40px] md:rounded-none absolute md:relative bottom-0 left-0 w-full z-20 shadow-[0_-15px_40px_rgba(0,0,0,0.2)] md:shadow-none animate-slide-up border-t border-white/40 md:border-none transition-transform duration-500 ease-in-out max-md:h-[calc(100dvh-190px)] md:h-full md:translate-y-0 ${isMobileFormCollapsed ? "max-md:translate-y-[65%]" : "max-md:translate-y-0"}`}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -204,7 +214,7 @@ function Login({ setSession }) {
             onClick={() => setIsMobileFormCollapsed(!isMobileFormCollapsed)}
           ></div>
 
-          <div className="w-full max-w-[380px] mx-auto md:bg-white md:p-8 md:rounded-[2rem] md:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] md:border md:border-slate-100 relative flex flex-col justify-center h-full md:h-max md:my-auto">
+          <div className="w-full max-w-[380px] mx-auto md:bg-white dark:md:bg-slate-800 md:p-8 md:rounded-[2rem] md:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] md:border md:border-slate-100 dark:md:border-slate-700 relative flex flex-col justify-center h-full md:h-max md:my-auto">
 
             {/* Desktop Lock Icon */}
             <div className="hidden md:flex w-16 h-16 rounded-full bg-indigo-50 text-indigo-600 items-center justify-center mx-auto mb-6 shrink-0">
@@ -214,21 +224,21 @@ function Login({ setSession }) {
             {/* Mobile Logo Block - Removed because we display it above the card */}
 
             <div className="mb-8 md:mb-10 text-center shrink-0">
-              <h2 className="text-[28px] md:text-3xl font-extrabold text-[#1A1F2C] tracking-tight flex items-center justify-center gap-2 mb-2">Welcome Back <span className="inline-block">👋</span></h2>
-              <p className="text-gray-500 text-sm md:text-base font-medium">Please sign in to your account</p>
+              <h2 className="text-[28px] md:text-3xl font-extrabold text-[#1A1F2C] dark:text-white tracking-tight flex items-center justify-center gap-2 mb-2">Welcome Back <span className="inline-block">👋</span></h2>
+              <p className="text-gray-500 dark:text-slate-400 text-sm md:text-base font-medium">Please sign in to your account</p>
             </div>
 
             <div className="space-y-4 md:space-y-5">
               <div>
-                <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1.5 md:mb-2">Email Address</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 md:mb-2">Email Address</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
                     <FaEnvelope />
                   </div>
                   <input
                     type="email"
                     placeholder="enter your email"
-                    className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-4 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 transition-all ${errors.email ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 focus:border-purple-500 focus:ring-purple-500/30"
+                    className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-4 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.email ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
                       }`}
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setErrors((prev) => ({ ...prev, email: "" })); }}
@@ -239,15 +249,15 @@ function Login({ setSession }) {
               </div>
 
               <div>
-                <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1.5 md:mb-2">Password</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 md:mb-2">Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
                     <FaLock />
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="password"
-                    className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-12 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 transition-all ${errors.password ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 focus:border-purple-500 focus:ring-purple-500/30"
+                    className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-12 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.password ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
                       }`}
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: "" })); }}
@@ -266,21 +276,23 @@ function Login({ setSession }) {
 
 
 
-              <div className="pt-2">
+              <div className="pt-2 md:pt-4">
                 <button
-                  onClick={handleLogin}
+                  type="submit"
                   disabled={loading}
-                  className={`w-full h-12 md:h-12 rounded-xl text-white font-bold text-[15px] transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_8px_20px_rgba(76,59,252,0.25)] ${loading ? "bg-slate-400 cursor-not-allowed shadow-none" : "bg-[#4C3BFC] hover:bg-[#4332e6] hover:-translate-y-0.5 active:translate-y-0"
-                    }`}
+                  onClick={handleLogin}
+                  className="w-full h-11 md:h-12 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-[0_10px_25px_-5px_rgba(79,70,229,0.5)] flex items-center justify-center gap-2 relative overflow-hidden group"
                 >
-                  {loading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
-                      Signing in...
-                    </>
-                  ) : (
-                    "Sign In"
-                  )}
+                  <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:animate-shine" />
+                  {loading ? "Signing in..." : "Sign In"}
+                </button>
+              </div>
+
+              <div className="mt-6 md:mt-8 text-center text-xs md:text-sm">
+                <p className="text-gray-500 dark:text-slate-400 font-medium mb-1">Don't have an agency account yet?</p>
+                <button onClick={onNavigateToSignup} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-bold transition-all relative group inline-block py-1">
+                  Register here
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 group-hover:w-full transition-all duration-300"></span>
                 </button>
               </div>
 

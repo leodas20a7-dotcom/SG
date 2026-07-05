@@ -14,17 +14,29 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
-function Charts() {
+function Charts({ companyId }) {
 
   const [barData, setBarData] = useState({ labels: [], datasets: [] });
   const [pieData, setPieData] = useState({ labels: [], datasets: [] });
 
   useEffect(() => {
     async function fetchData() {
-      const { count: guards } = await supabase.from("guards").select("*", { count: "exact", head: true });
-      const { count: attendance } = await supabase.from("attendance").select("*", { count: "exact", head: true });
-      const { count: shifts } = await supabase.from("shifts").select("*", { count: "exact", head: true });
-      const { count: incidents } = await supabase.from("incidents").select("*", { count: "exact", head: true });
+      let qG = supabase.from("guards").select("*", { count: "exact", head: true });
+      let qA = supabase.from("attendance").select("*", { count: "exact", head: true });
+      let qS = supabase.from("shifts").select("*", { count: "exact", head: true });
+      let qI = supabase.from("incidents").select("*", { count: "exact", head: true });
+
+      if (companyId) {
+        qG = qG.eq("company_id", companyId);
+        qA = qA.eq("company_id", companyId);
+        qS = qS.eq("company_id", companyId);
+        qI = qI.eq("company_id", companyId);
+      }
+
+      const { count: guards } = await qG;
+      const { count: attendance } = await qA;
+      const { count: shifts } = await qS;
+      const { count: incidents } = await qI;
 
       setBarData({
         labels: ["Guards", "Attendance", "Shifts", "Incidents"],
@@ -35,7 +47,11 @@ function Charts() {
         }],
       });
 
-      const { data: statuses } = await supabase.from("incidents").select("incident_status");
+      let qStatuses = supabase.from("incidents").select("incident_status");
+      if (companyId) {
+        qStatuses = qStatuses.eq("company_id", companyId);
+      }
+      const { data: statuses } = await qStatuses;
       if (statuses) {
         const counts = {};
         statuses.forEach((i) => { counts[i.incident_status] = (counts[i.incident_status] || 0) + 1; });
@@ -57,13 +73,25 @@ function Charts() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
       <div className="glass-card rounded-2xl p-6">
         <h2 className="text-xl font-semibold mb-5 text-gray-700">System Overview</h2>
-        <Bar data={barData} options={{ responsive: true, plugins: { legend: { display: false } } }} />
+        <Bar data={barData} options={{ 
+          responsive: true, 
+          color: '#94a3b8',
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }
+          },
+          plugins: { legend: { display: false } } 
+        }} />
       </div>
 
       <div className="glass-card rounded-2xl p-6">
         <h2 className="text-xl font-semibold mb-5 text-gray-700">Incident Status</h2>
         {pieData.labels.length > 0
-          ? <Pie data={pieData} options={{ responsive: true }} />
+          ? <Pie data={pieData} options={{ 
+              responsive: true,
+              color: '#94a3b8',
+              plugins: { legend: { labels: { color: '#94a3b8' } } }
+            }} />
           : <div className="flex items-center justify-center h-[300px] text-gray-400">No incident data</div>
         }
       </div>

@@ -8,26 +8,24 @@ const PhoneInput = PhoneInputRaw.default ? PhoneInputRaw.default : PhoneInputRaw
 import 'react-phone-input-2/lib/style.css';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import CustomSelect from "./CustomSelect";
-import { FaUser, FaCalendarAlt, FaKey, FaArrowRight, FaArrowLeft, FaCheck, FaTrashAlt, FaPen, FaClock, FaPlus, FaClipboardCheck } from "react-icons/fa";
+import { FaUser, FaUserShield, FaCalendarAlt, FaKey, FaArrowRight, FaArrowLeft, FaCheck, FaTrashAlt, FaPen, FaClock, FaPlus, FaClipboardCheck, FaSpinner, FaCopy, FaEnvelope } from "react-icons/fa";
+import { shortId } from "./lib/shortId";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const STATUS_OPTIONS = ["Active", "Inactive"];
-const SHIFT_OPTIONS = ["Morning Shift", "Evening Shift", "Night Shift", "Full Day", "Custom"];
-const DEFAULT_TIMINGS = {
-  "Morning Shift": { start: "06:00:00", startSimple: "06:00", end: "14:00:00", endSimple: "14:00" },
-  "Evening Shift": { start: "14:00:00", startSimple: "14:00", end: "22:00:00", endSimple: "22:00" },
-  "Night Shift": { start: "22:00:00", startSimple: "22:00", end: "06:00:00", endSimple: "06:00" },
-  "Full Day": { start: "08:00:00", startSimple: "08:00", end: "20:00:00", endSimple: "20:00" },
-};
+
 
 /* ── helper: post a circular notification ── */
 async function autoNotify(title, message, guardId = null, isBroadcast = false) {
   await supabase.from("notifications").insert([{ title, message, guard_id: guardId, is_broadcast: isBroadcast, type: "info", user_role: "guard" }]);
 }
 
-function Guards({ onGuardAdded, onNavigate }) {
+function Guards({ onGuardAdded, onNavigate, companyId }) {
   const [guards, setGuards] = useState([]);
   const [locations, setLocations] = useState([]);
-  const [shiftTimings, setShiftTimings] = useState(DEFAULT_TIMINGS);
+  const [companyStatus, setCompanyStatus] = useState("active");
+  const [purchasedSeats, setPurchasedSeats] = useState(0);
 
   // Wizard Step State
   const [currentStep, setCurrentStep] = useState(1);
@@ -36,6 +34,134 @@ function Guards({ onGuardAdded, onNavigate }) {
   // Active guard for Temporary Override Modal
   const [overrideGuard, setOverrideGuard] = useState(null);
   const [selectedShiftGuard, setSelectedShiftGuard] = useState(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [selectedReportMonth, setSelectedReportMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const downloadGuardReport = async (guard) => {
+    if (!guard) return;
+    setIsGeneratingPDF(true);
+    showToast("Generating PDF Report...", "info");
+
+    try {
+      const [year, month] = selectedReportMonth.split("-");
+      const reportDate = new Date(year, parseInt(month) - 1, 1);
+
+      const monthStart = new Date(reportDate.getFullYear(), reportDate.getMonth(), 1).toISOString();
+      const monthEnd = new Date(reportDate.getFullYear(), reportDate.getMonth() + 1, 0).toISOString();
+
+      const { data: att } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("guard_id", guard.id)
+        .gte("check_in_time", monthStart)
+        .lte("check_in_time", monthEnd);
+
+      const { data: sh } = await supabase
+        .from("shifts")
+        .select("*")
+        .eq("guard_id", guard.id);
+
+      const totalPresent = att ? att.filter(r => r.status === "Present" || r.status === "On Duty").length : 0;
+      const totalAbsent = att ? att.filter(r => r.status === "Absent").length : 0;
+      const totalLeave = att ? att.filter(r => r.status === "Leave" || r.status === "Half Day").length : 0;
+
+      let totalHours = 0;
+      let punctualityCount = 0;
+      let checkedInCount = 0;
+
+      att?.forEach(r => {
+        if (r.check_in_time && r.check_out_time) {
+          const hours = (new Date(r.check_out_time) - new Date(r.check_in_time)) / (1000 * 60 * 60);
+          totalHours += hours > 0 ? hours : 0;
+        }
+        if (r.check_in_time && r.status !== "Leave" && r.status !== "Absent") {
+          checkedInCount++;
+          const activeShift = sh?.find(s => s.shift_date === null);
+          if (activeShift && activeShift.start_time) {
+            const checkInDate = new Date(r.check_in_time);
+            const [shH, shM] = activeShift.start_time.split(":");
+            const scheduledStart = new Date(checkInDate);
+            scheduledStart.setHours(parseInt(shH), parseInt(shM), 0, 0);
+            if ((checkInDate - scheduledStart) / (1000 * 60) <= 15) {
+              punctualityCount++;
+            }
+          } else {
+            const h = new Date(r.check_in_time).getHours();
+            const m = new Date(r.check_in_time).getMinutes();
+            if (h < 9 || (h === 9 && m === 0)) punctualityCount++;
+          }
+        }
+      });
+
+      const punctualityRate = checkedInCount > 0 ? Math.round((punctualityCount / checkedInCount) * 100) : 0;
+      const overallScore = (totalPresent + totalAbsent) > 0
+        ? Math.min(100, Math.round((totalPresent / (totalPresent + totalAbsent)) * 60 + (punctualityRate * 0.4)))
+        : 0;
+
+      const doc = new jsPDF();
+
+      // Load and Draw App Logo
+      const img = new Image();
+      img.src = '/logo.png';
+      await new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+      doc.addImage(img, 'PNG', 14, 14, 12, 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(22);
+      doc.setTextColor(40, 40, 40);
+      doc.text("Guard Performance Report", 30, 22);
+
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Guard Name: ${guard.name}`, 14, 32);
+      const dateStr = reportDate.toLocaleDateString('default', { month: 'long', year: 'numeric' });
+      doc.text(`Report Month: ${dateStr}`, 14, 38);
+
+      autoTable(doc, {
+        startY: 45,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Overall Performance Score', `${overallScore}%`],
+          ['Punctuality Rate', `${punctualityRate}%`],
+          ['Total Hours Worked', `${totalHours.toFixed(1)} hrs`],
+          ['Present Shifts', `${totalPresent}`],
+          ['Leaves Granted', `${totalLeave}`],
+          ['Unexcused Absences', `${totalAbsent}`]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+        styles: { fontSize: 11, cellPadding: 6 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 100 }, 1: { cellWidth: 'auto' } }
+      });
+
+      // Add Calculation Logic in Footer
+      const finalY = doc.lastAutoTable.finalY + 15;
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      doc.setFont("helvetica", "bold");
+      doc.text("Calculation Methodology:", 14, finalY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text("• Punctuality Rate: Percentage of shifts where check-in occurred within 15 mins of start time.", 14, finalY + 6);
+      doc.text("• Overall Performance Score: Weighted average of Shift Attendance (60%) and Punctuality (40%).", 14, finalY + 11);
+
+      doc.save(`Guard_Report_${(guard.name || "Guard").replace(/\s+/g, '_')}_${dateStr}.pdf`);
+      showToast("PDF Report downloaded successfully!", "success");
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      showToast("Failed to generate PDF.", "error");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   // Core fields
   const [name, setName] = useState("");
@@ -44,19 +170,15 @@ function Guards({ onGuardAdded, onNavigate }) {
   const [status, setStatus] = useState("Active");
   const [dutyLocationId, setDutyLocationId] = useState("");
 
-  // Temporary location override
+  // Temporary location override (kept for date-specific overrides)
   const [tempLocationId, setTempLocationId] = useState("");
   const [tempFrom, setTempFrom] = useState("");
   const [tempTo, setTempTo] = useState("");
-
-  // Shift fields
-  const [shiftName, setShiftName] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-
   const [tempShiftName, setTempShiftName] = useState("");
   const [tempStartTime, setTempStartTime] = useState("");
   const [tempEndTime, setTempEndTime] = useState("");
+
+
 
   // Login credentials
   const [email, setEmail] = useState("");
@@ -67,6 +189,8 @@ function Guards({ onGuardAdded, onNavigate }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [showLimitPopup, setShowLimitPopup] = useState(false);
+  const [newGuardCredentials, setNewGuardCredentials] = useState(null);
   const { showToast, ToastContainer } = useToast();
 
   /* ── validation ── */
@@ -77,9 +201,13 @@ function Guards({ onGuardAdded, onNavigate }) {
     else if (!/^[a-zA-Z\s]+$/.test(name.trim())) errs.name = "Name should only contain letters";
     if (!phone) errs.phone = "Phone number is required";
     else {
-      const phoneNumber = parsePhoneNumberFromString(phone.startsWith('+') ? phone : '+' + phone);
+      const formattedPhone = phone.startsWith('+') ? phone : '+' + phone;
+      const phoneNumber = parsePhoneNumberFromString(formattedPhone);
       if (!phoneNumber || !phoneNumber.isValid()) {
         errs.phone = "Enter a valid international phone number";
+      } else {
+        const isDuplicate = guards.some(g => g.phone === formattedPhone && g.id !== editingId);
+        if (isDuplicate) errs.phone = "This phone number is already registered.";
       }
     }
     if (!site.trim()) errs.site = "Place is required";
@@ -106,9 +234,13 @@ function Guards({ onGuardAdded, onNavigate }) {
     if (!name.trim()) errs.name = "Guard name is required";
     if (!phone) errs.phone = "Phone number is required";
     else {
-      const phoneNumber = parsePhoneNumberFromString(phone.startsWith('+') ? phone : '+' + phone);
+      const formattedPhone = phone.startsWith('+') ? phone : '+' + phone;
+      const phoneNumber = parsePhoneNumberFromString(formattedPhone);
       if (!phoneNumber || !phoneNumber.isValid()) {
         errs.phone = "Enter a valid international phone number";
+      } else {
+        const isDuplicate = guards.some(g => g.phone === formattedPhone && g.id !== editingId);
+        if (isDuplicate) errs.phone = "This phone number is already registered.";
       }
     }
     if (!site.trim()) errs.site = "Place is required";
@@ -224,33 +356,39 @@ function Guards({ onGuardAdded, onNavigate }) {
   /* ── fetch ── */
   async function fetchGuards() {
     try {
-      const { data: guardsData, error } = await supabase
+      let q = supabase
         .from("guards")
         .select(`
           *,
           duty_location:duty_locations!duty_location_id(place_name),
-          profiles(email),
           temp_duty_location:duty_locations!temp_location_id(place_name)
         `)
         .order("id", { ascending: true });
+      if (companyId) q = q.eq("company_id", companyId);
+
+      const { data: guardsData, error } = await q;
 
       if (error) {
         showToast(`Could not load guards: ${error.message}`, "error");
         return;
       }
 
-      const { data: shiftsData } = await supabase
+      let qs = supabase
         .from("shifts")
         .select("*");
+      if (companyId) qs = qs.eq("company_id", companyId);
+      const { data: shiftsData } = await qs;
 
       const mapped = (guardsData || []).map(guard => {
         const guardShifts = (shiftsData || []).filter(s => s.guard_id === guard.id);
-        const constantShift = guardShifts.find(s => s.shift_date === null);
-        const tempShifts = guardShifts.filter(s => s.shift_date !== null);
+        // Weekly schedule rows: day_of_week IS NOT NULL
+        const weeklyShifts = guardShifts.filter(s => s.day_of_week !== null && s.day_of_week !== undefined);
+        // Date override rows: shift_date IS NOT NULL
+        const dateOverrides = guardShifts.filter(s => s.shift_date !== null && s.shift_date !== undefined);
         return {
           ...guard,
-          constantShift,
-          tempShifts
+          weeklyShifts,
+          dateOverrides,
         };
       });
 
@@ -262,14 +400,29 @@ function Guards({ onGuardAdded, onNavigate }) {
 
   async function fetchLocations() {
     try {
-      const { data } = await supabase.from("duty_locations").select("*").order("place_name");
+      let q = supabase.from("duty_locations").select("*").order("place_name");
+      if (companyId) q = q.eq("company_id", companyId);
+      const { data } = await q;
       setLocations(data || []);
+    } catch { /* ignore */ }
+  }
+
+  async function fetchCompanyStatus() {
+    if (!companyId) return;
+    try {
+      const { data } = await supabase.from("companies").select("subscription_status, purchased_seats").eq("id", companyId).single();
+      if (data) {
+        setCompanyStatus(data.subscription_status || "active");
+        setPurchasedSeats(data.purchased_seats || 0);
+      }
     } catch { /* ignore */ }
   }
 
   async function fetchShiftTimings() {
     try {
-      const { data } = await supabase.from("shift_timings").select("*");
+      let q = supabase.from("shift_timings").select("*");
+      if (companyId) q = q.eq("company_id", companyId);
+      const { data } = await q;
       if (data && data.length > 0) {
         const timings = {};
         data.forEach((row) => {
@@ -292,13 +445,34 @@ function Guards({ onGuardAdded, onNavigate }) {
   /* ── add guard ── */
   async function addGuard() {
     if (!validate()) return;
+
+    // Check Seat Limits
+    const activeGuardsCount = guards.filter(g => g.status === "Active").length;
+    if (status === "Active" && activeGuardsCount >= purchasedSeats) {
+      setShowLimitPopup(true);
+      return;
+    }
+
     setLoading(true);
     try {
       let authUserId = null;
       if (email.trim() && password) {
         const { data: { session: saved } } = await supabase.auth.getSession();
-        const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
+        sessionStorage.setItem("ignore_auth_change", "true");
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              is_guard: true,
+              company_id: companyId,
+              name: name.trim(),
+              role: 'guard'
+            }
+          }
+        });
         if (authErr) {
+          sessionStorage.removeItem("ignore_auth_change");
           let msg = authErr.message;
           if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists")) {
             msg = "This email is already registered. If you reset the database recently, please run the SQL cleanup script in Supabase to clear old Auth accounts.";
@@ -311,13 +485,12 @@ function Guards({ onGuardAdded, onNavigate }) {
           const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
           if (sessionErr) showToast("Session issue, please re-login.", "error");
         }
+        sessionStorage.removeItem("ignore_auth_change");
         authUserId = authData.user?.id;
-        if (authUserId) {
-          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
-        }
       }
 
       const { data: insertData, error } = await supabase.from("guards").insert([{
+        company_id: companyId,
         name: name.trim(), phone: phone.startsWith('+') ? phone : '+' + phone, site: site.trim(),
         status: status || "Active",
         duty_location_id: dutyLocationId || null,
@@ -329,59 +502,29 @@ function Guards({ onGuardAdded, onNavigate }) {
       }]).select();
 
       if (error) {
+        alert("DEBUG GUARD INSERT ERROR: " + JSON.stringify(error));
         showToast(error.message.includes("duplicate") ? "Guard already exists." : "Could not add guard.", "error");
+        setLoading(false);
         return;
       }
 
-      const guardId = insertData[0]?.id;
-
-      // Save Constant Shift
-      if (guardId && shiftName) {
-        await supabase.from("shifts").insert([{
-          guard_id: guardId,
-          site: site.trim(),
-          shift_name: shiftName,
-          start_time: startTime || null,
-          end_time: endTime || null,
-          shift_date: null
-        }]);
+      if (!insertData || insertData.length === 0) {
+        alert("DEBUG GUARD INSERT DATA EMPTY: Row Level Security might have silently blocked the insert!");
       }
 
-      // Save Temporary Shift Override
-      if (guardId && tempFrom && tempTo && tempShiftName) {
-        let start = new Date(tempFrom);
-        let end = new Date(tempTo);
-        let dateList = [];
-        while (start <= end) {
-          dateList.push(start.toISOString().split("T")[0]);
-          start.setDate(start.getDate() + 1);
-        }
+      const guardId = insertData?.[0]?.id;
 
-        const overridePayloads = dateList.map(d => ({
-          guard_id: guardId,
-          site: site.trim(),
-          shift_name: tempShiftName,
-          start_time: tempStartTime || null,
-          end_time: tempEndTime || null,
-          shift_date: d
-        }));
-
-        if (overridePayloads.length > 0) {
-          await supabase.from("shifts").insert(overridePayloads);
-        }
-      }
-
-      // Auto-notify if temp location set
-      if (tempLocationId && tempFrom && tempTo) {
-        const locName = locations.find(l => l.id === parseInt(tempLocationId))?.place_name || "another location";
-        await autoNotify(
-          `Temporary Duty Assignment – ${name.trim()}`,
-          `Guard ${name.trim()} is temporarily assigned to ${locName} from ${tempFrom} to ${tempTo}.`,
-          guardId
-        );
-      }
 
       showToast("Guard added successfully!", "success");
+      
+      if (email.trim() && password) {
+        setNewGuardCredentials({
+          name: name.trim(),
+          email: email.trim(),
+          password: password
+        });
+      }
+
       resetForm();
       fetchGuards();
       setViewMode("list");
@@ -410,28 +553,6 @@ function Guards({ onGuardAdded, onNavigate }) {
     setEmail(resolvedEmail);
     setPassword("");
 
-    // Load Constant Shift details
-    if (guard.constantShift) {
-      setShiftName(guard.constantShift.shift_name || "");
-      setStartTime(guard.constantShift.start_time || "");
-      setEndTime(guard.constantShift.end_time || "");
-    } else {
-      setShiftName("");
-      setStartTime("");
-      setEndTime("");
-    }
-
-    // Load Temporary Shift details
-    if (guard.tempShifts && guard.tempShifts.length > 0) {
-      const tShift = guard.tempShifts[0];
-      setTempShiftName(tShift.shift_name || "");
-      setTempStartTime(tShift.start_time || "");
-      setTempEndTime(tShift.end_time || "");
-    } else {
-      setTempShiftName("");
-      setTempStartTime("");
-      setTempEndTime("");
-    }
 
     setErrors({});
     setCurrentStep(1);
@@ -449,8 +570,7 @@ function Guards({ onGuardAdded, onNavigate }) {
     setName(""); setPhone(""); setSite(""); setStatus("Active");
     setDutyLocationId(""); setTempLocationId(""); setTempFrom(""); setTempTo("");
     setEmail(""); setPassword("");
-    setShiftName(""); setStartTime(""); setEndTime("");
-    setTempShiftName(""); setTempStartTime(""); setTempEndTime("");
+
     setCurrentStep(1);
     setPrevDutyLocationId(null);
     setErrors({});
@@ -467,14 +587,28 @@ function Guards({ onGuardAdded, onNavigate }) {
       // Create auth account if credentials added for first time
       if (email.trim() && !authUserId && password) {
         const { data: { session: saved } } = await supabase.auth.getSession();
+        sessionStorage.setItem("ignore_auth_change", "true");
         const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
         if (!authErr && authData.user) {
           authUserId = authData.user.id;
-          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard" }]);
+          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard", company_id: companyId }]);
         }
         if (saved) {
           const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
           if (sessionErr) showToast("Session issue, please re-login.", "error");
+        }
+        sessionStorage.removeItem("ignore_auth_change");
+      } else if (authUserId && password) {
+        // Update existing user's password securely via RPC
+        const { error: rpcErr } = await supabase.rpc("admin_update_user_password", {
+          target_user_id: authUserId,
+          new_password: password
+        });
+        if (rpcErr) {
+          console.error("Password update error:", rpcErr);
+          showToast("Failed to update password. Did you run the SQL RPC script?", "error");
+          setLoading(false);
+          return;
         }
       }
 
@@ -490,61 +624,6 @@ function Guards({ onGuardAdded, onNavigate }) {
 
       if (error) { showToast("Could not update guard.", "error"); return; }
 
-      // Save/Update Constant Shift
-      if (shiftName) {
-        const { data: existingConstant } = await supabase
-          .from("shifts")
-          .select("id")
-          .eq("guard_id", editingId)
-          .is("shift_date", null)
-          .maybeSingle();
-
-        const shiftPayload = {
-          guard_id: editingId,
-          site: site.trim(),
-          shift_name: shiftName,
-          start_time: startTime || null,
-          end_time: endTime || null,
-          shift_date: null
-        };
-
-        if (existingConstant?.id) {
-          await supabase.from("shifts").update(shiftPayload).eq("id", existingConstant.id);
-        } else {
-          await supabase.from("shifts").insert([shiftPayload]);
-        }
-      }
-
-      // Save/Update Temporary Shift Override
-      if (tempFrom && tempTo && tempShiftName) {
-        await supabase
-          .from("shifts")
-          .delete()
-          .eq("guard_id", editingId)
-          .gte("shift_date", tempFrom)
-          .lte("shift_date", tempTo);
-
-        let start = new Date(tempFrom);
-        let end = new Date(tempTo);
-        let dateList = [];
-        while (start <= end) {
-          dateList.push(start.toISOString().split("T")[0]);
-          start.setDate(start.getDate() + 1);
-        }
-
-        const overridePayloads = dateList.map(d => ({
-          guard_id: editingId,
-          site: site.trim(),
-          shift_name: tempShiftName,
-          start_time: tempStartTime || null,
-          end_time: tempEndTime || null,
-          shift_date: d
-        }));
-
-        if (overridePayloads.length > 0) {
-          await supabase.from("shifts").insert(overridePayloads);
-        }
-      }
 
       // ── Auto-circular: primary location changed ──
       const newLocId = dutyLocationId ? parseInt(dutyLocationId) : null;
@@ -605,9 +684,13 @@ function Guards({ onGuardAdded, onNavigate }) {
       const { error } = await supabase.from("guards").delete().eq("id", id);
       if (error) { showToast("Could not delete guard.", "error"); return; }
 
-      // Delete profile to revoke access
+      // Delete profile and auth user to completely revoke access
       if (guardData?.auth_user_id) {
+        // Delete from profiles (may cascade from auth.users depending on setup, but safe to do here)
         await supabase.from("profiles").delete().eq("id", guardData.auth_user_id);
+
+        // Delete the actual auth.user so the email can be re-registered
+        await supabase.rpc('delete_auth_user', { target_user_id: guardData.auth_user_id });
       }
 
       showToast("Guard and related data deleted.", "success");
@@ -619,7 +702,7 @@ function Guards({ onGuardAdded, onNavigate }) {
     }
   }
 
-  useEffect(() => { fetchGuards(); fetchLocations(); fetchShiftTimings(); }, []);
+  useEffect(() => { fetchGuards(); fetchLocations(); fetchShiftTimings(); fetchCompanyStatus(); }, [companyId]);
   function clearError(field) { setErrors(prev => ({ ...prev, [field]: "" })); }
 
   /* ── effective location for display ── */
@@ -775,8 +858,26 @@ function Guards({ onGuardAdded, onNavigate }) {
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-[450px] shadow-2xl border border-gray-150 max-h-[90vh] overflow-y-auto animate-fade-in mx-4">
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-800">📅 Shift & Location Details</h2>
-              <button onClick={() => setSelectedShiftGuard(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              <h2 className="text-xl font-bold text-gray-800">📅 Guard Profile & Schedule</h2>
+              <div className="flex items-center gap-2">
+                <input
+                  type="month"
+                  value={selectedReportMonth}
+                  onChange={(e) => setSelectedReportMonth(e.target.value)}
+                  className="h-8 px-2 text-[11px] border border-gray-200 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  title="Select month for report"
+                />
+                <button
+                  onClick={() => downloadGuardReport(selectedShiftGuard)}
+                  disabled={isGeneratingPDF}
+                  className={`bg-indigo-50 text-indigo-700 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 transition shadow-sm border border-indigo-100 ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-100'}`}
+                  title="Download Monthly Report"
+                >
+                  {isGeneratingPDF ? <FaSpinner className="w-3.5 h-3.5 animate-spin" /> : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>}
+                  PDF
+                </button>
+                <button onClick={() => setSelectedShiftGuard(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -858,333 +959,287 @@ function Guards({ onGuardAdded, onNavigate }) {
       )}
 
       <div className="mt-4 space-y-8">
-        {/* ─── ADD / EDIT FORM ─── */}
-        {viewMode === "form" && (
-          <div className={`glass-card rounded-3xl p-6 md:p-8 transition-all duration-300 relative z-40 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)] ${
-            editingId ? "ring-2 ring-blue-500/20 bg-blue-50/10" : "ring-1 ring-slate-200/50 bg-white/70"
-          }`}>
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-xl md:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-                {editingId ? (
-                  <>
-                    <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPen className="text-sm" /></span>
-                    <span>Edit Guard Profile</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPlus className="text-sm" /></span>
-                    <span className="hidden md:inline">Add New Guard & Profile Login</span>
-                    <span className="md:hidden">Add Guard</span>
-                  </>
-                )}
-              </h2>
-              <p className="hidden md:block text-xs text-slate-450 mt-1 font-medium">Onboard, coordinate, and establish system credentials for guards.</p>
+
+        {/* ─── SEAT USAGE BANNER ─── */}
+        <div className="glass-card rounded-2xl p-5 md:p-6 flex flex-col md:flex-row items-center justify-between gap-6 border border-slate-200/60 shadow-sm bg-gradient-to-r from-blue-50/40 to-white">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl shadow-inner">
+              <FaUserShield />
             </div>
-            {editingId ? (
-              <span className="text-[10px] font-bold uppercase tracking-widest bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                Editing: ID #{editingId}
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-2 shadow-sm whitespace-nowrap"
-              >
-                <FaClipboardCheck className="text-sm" />
-                <span>Guards Profile History</span>
-              </button>
-            )}
+            <div>
+              <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">License Usage</h3>
+              <div className="text-2xl font-extrabold text-slate-800">
+                {guards.filter(g => g.status === "Active").length} <span className="text-slate-400 text-xl font-medium">/ {purchasedSeats} Seats</span>
+              </div>
+            </div>
           </div>
 
-          {/* Stepper progress indicator */}
-          <div className="flex items-center w-full mb-8 select-none overflow-x-auto pb-2">
-            {[
-              { num: 1, name: "Personal Details", icon: FaUser },
-              { num: 2, name: "Assignment", icon: FaCalendarAlt },
-              { num: 3, name: "Login Info", icon: FaKey }
-            ].map((step, index) => {
-              const IconComponent = step.icon;
-              const isCurrent = currentStep === step.num;
-              const isCompleted = currentStep > step.num;
-              return (
-                <div key={step.num} className="flex-1 flex items-center min-w-[140px] last:flex-none">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                      isCurrent
+          <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto">
+            <div className="flex-1 md:flex-none px-5 py-3 bg-white rounded-xl border border-slate-200 shadow-sm text-center">
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Active</p>
+              <p className="text-xl font-black text-emerald-600">{guards.filter(g => g.status === "Active").length}</p>
+            </div>
+            <div className="flex-1 md:flex-none px-5 py-3 bg-white rounded-xl border border-slate-200 shadow-sm text-center">
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Available</p>
+              <p className="text-xl font-black text-blue-600">{Math.max(0, purchasedSeats - guards.filter(g => g.status === "Active").length)}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── ADD / EDIT FORM ─── */}
+        {viewMode === "form" && (
+          <div className={`glass-card rounded-3xl p-6 md:p-8 transition-all duration-300 relative z-40 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)] ${editingId ? "ring-2 ring-blue-500/20 bg-blue-50/10" : "ring-1 ring-slate-200/50 bg-white/70"
+            }`}>
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-xl md:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                  {editingId ? (
+                    <>
+                      <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPen className="text-sm" /></span>
+                      <span>Edit Guard Profile</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="p-2 rounded-xl bg-blue-50 text-blue-600"><FaPlus className="text-sm" /></span>
+                      <span className="hidden md:inline">Add New Guard & Profile Login</span>
+                      <span className="md:hidden">Add Guard</span>
+                    </>
+                  )}
+                </h2>
+                <p className="hidden md:block text-xs text-slate-450 mt-1 font-medium">Onboard, coordinate, and establish system credentials for guards.</p>
+              </div>
+              {editingId ? (
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                  Editing: ID {shortId(editingId)}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-2 shadow-sm whitespace-nowrap"
+                >
+                  <FaClipboardCheck className="text-sm" />
+                  <span>Guards Profile History</span>
+                </button>
+              )}
+            </div>
+
+            {/* Stepper progress indicator */}
+            <div className="flex items-center w-full mb-8 select-none overflow-x-auto pb-2">
+              {[
+                { num: 1, name: "Personal Details", icon: FaUser },
+                { num: 2, name: "Login Info", icon: FaKey }
+              ].map((step, index) => {
+                const IconComponent = step.icon;
+                const isCurrent = currentStep === step.num;
+                const isCompleted = currentStep > step.num;
+                return (
+                  <div key={step.num} className="flex-1 flex items-center min-w-[140px] last:flex-none">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${isCurrent
                         ? "bg-blue-600 text-white shadow-md shadow-blue-100 scale-105"
                         : isCompleted
                           ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
                           : "bg-slate-200/90 text-slate-600 border border-slate-300/30"
-                    }`}>
-                      {isCompleted ? <FaCheck className="text-xs" /> : <IconComponent className="text-xs" />}
+                        }`}>
+                        {isCompleted ? <FaCheck className="text-xs" /> : <IconComponent className="text-xs" />}
+                      </div>
+                      <div className="text-left">
+                        <span className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Step 0{step.num}</span>
+                        <span className={`text-[11px] md:text-xs font-bold whitespace-nowrap ${isCurrent ? "text-slate-800" : "text-slate-650"}`}>{step.name}</span>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <span className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Step 0{step.num}</span>
-                      <span className={`text-[11px] md:text-xs font-bold whitespace-nowrap ${isCurrent ? "text-slate-800" : "text-slate-650"}`}>{step.name}</span>
-                    </div>
+                    {index < 1 && (
+                      <div className="flex-1 mx-4 h-0.5 bg-slate-200/80 relative min-w-[20px]">
+                        <div className="absolute top-0 left-0 h-full bg-blue-650 transition-all duration-500"
+                          style={{ width: isCompleted ? "100%" : "0%" }} />
+                      </div>
+                    )}
                   </div>
-                  {index < 2 && (
-                    <div className="flex-1 mx-4 h-0.5 bg-slate-200/80 relative min-w-[20px]">
-                      <div className="absolute top-0 left-0 h-full bg-blue-650 transition-all duration-500" 
-                           style={{ width: isCompleted ? "100%" : "0%" }} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Step 1: Personal details */}
-          {currentStep === 1 && (
-            <div className="space-y-5 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Guard Name</label>
-                  <input type="text" placeholder="Full name" value={name}
-                    onChange={e => { setName(e.target.value); clearError("name"); }}
-                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
-                      errors.name 
-                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
-                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
-                    }`}
-                  />
-                  {errors.name && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.name}</p>}
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Phone Number</label>
-                  <PhoneInput
-                    country={'au'}
-                    enableSearch={true}
-                    value={phone}
-                    onChange={v => { setPhone(v || ""); clearError("phone"); }}
-                    inputStyle={{
-                      width: '100%',
-                      height: '44px',
-                      borderRadius: '0.75rem',
-                      borderColor: errors.phone ? '#f87171' : '#e2e8f0',
-                      background: '#F4F6F9',
-                      fontSize: '12px',
-                      transition: 'all 0.2s'
-                    }}
-                    buttonStyle={{
-                      borderRadius: '0.75rem 0 0 0.75rem',
-                      borderColor: errors.phone ? '#f87171' : '#e2e8f0',
-                      background: '#f1f5f9'
-                    }}
-                    dropdownStyle={{
-                      width: '300px',
-                      paddingLeft: '10px',
-                      borderRadius: '0.75rem',
-                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                      border: '1px solid #e2e8f0',
-                      overflow: 'hidden',
-                      paddingTop: '0px',
-                      margin: '0px'
-                    }}
-                    searchStyle={{
-                      width: '75%',
-                      margin: '8px 5%',
-                      padding: '8px 10px 8px 30px',
-                      borderRadius: '0.5rem',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#f8fafc',
-                      fontSize: '13px',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  {errors.phone && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.phone}</p>}
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Place</label>
-                  <input type="text" placeholder="Place / Area" value={site}
-                    onChange={e => { setSite(e.target.value); clearError("site"); }}
-                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${
-                      errors.site 
-                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500" 
-                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
-                    }`}
-                  />
-                  {errors.site && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.site}</p>}
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Status</label>
-                  <CustomSelect
-                    value={status}
-                    onChange={val => setStatus(val)}
-                    options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
-                    placeholder="Select Status"
-                    heightClass="h-11"
-                  />
-                </div>
-              </div>
+                );
+              })}
             </div>
-          )}
-          {currentStep === 2 && (
-            <div className="space-y-5 animate-fade-in">
-              <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-5 md:p-6 space-y-6">
-                <div onClickCapture={() => {
-                  if (locations.length === 0) {
-                    showToast("No locations available. Please create a location first.", "info");
-                  }
-                }}>
-                  <p className="block text-[11px] font-bold text-slate-650 uppercase tracking-wider mb-2">🏠 Primary Fixed Location</p>
-                  {locations.length === 0 && (
-                    <div className="mb-3 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-xs flex items-center gap-2 shadow-sm animate-fade-in">
-                      <span className="text-base">ℹ️</span>
-                      <span className="font-medium">No locations available. Please create a location first.</span>
-                    </div>
-                  )}
-                  <CustomSelect
-                    value={dutyLocationId}
-                    onChange={val => { setDutyLocationId(val); clearError("dutyLocationId"); }}
-                    options={[
-                      { value: "", label: "Not assigned" },
-                      ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
-                    ]}
-                    placeholder="Not assigned"
-                    heightClass="h-11"
-                  />
-                </div>
 
-                <div className="border-t border-slate-200/60 pt-5">
-                  <p className="block text-[11px] font-bold text-slate-650 uppercase tracking-wider mb-2">⏰ Constant Shift Timing</p>
-                  <CustomSelect
-                    value={shiftName}
-                    onChange={val => {
-                      setShiftName(val);
-                      const defaultTime = shiftTimings[val];
-                      if (defaultTime) {
-                        setStartTime(defaultTime.startSimple);
-                        setEndTime(defaultTime.endSimple);
-                      }
-                    }}
-                    options={[
-                      { value: "", label: "Select Constant Shift" },
-                      ...SHIFT_OPTIONS.map(s => ({ value: s, label: s }))
-                    ]}
-                    placeholder="Select Constant Shift"
-                    heightClass="h-11"
-                  />
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Start Time</label>
-                      <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                        className="w-full h-11 border border-slate-200 px-3 rounded-xl text-xs focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white transition" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">End Time</label>
-                      <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
-                        className="w-full h-11 border border-slate-200 px-3 rounded-xl text-xs focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white transition" />
-                    </div>
+            {/* Step 1: Personal details */}
+            {currentStep === 1 && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Guard Name</label>
+                    <input type="text" placeholder="Full name" value={name}
+                      onChange={e => { setName(e.target.value); clearError("name"); }}
+                      className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${errors.name
+                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500"
+                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                        }`}
+                    />
+                    {errors.name && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.name}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Phone Number</label>
+                    <PhoneInput
+                      country={'au'}
+                      enableSearch={true}
+                      value={phone}
+                      onChange={v => { setPhone(v || ""); clearError("phone"); }}
+                      inputStyle={{
+                        width: '100%',
+                        height: '44px',
+                        borderRadius: '0.75rem',
+                        borderColor: errors.phone ? '#f87171' : '#e2e8f0',
+                        background: '#F4F6F9',
+                        fontSize: '12px',
+                        transition: 'all 0.2s'
+                      }}
+                      buttonStyle={{
+                        borderRadius: '0.75rem 0 0 0.75rem',
+                        borderColor: errors.phone ? '#f87171' : '#e2e8f0',
+                        background: '#f1f5f9'
+                      }}
+                      dropdownStyle={{
+                        width: '300px',
+                        paddingLeft: '10px',
+                        borderRadius: '0.75rem',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid #e2e8f0',
+                        overflow: 'hidden',
+                        paddingTop: '0px',
+                        margin: '0px'
+                      }}
+                      searchStyle={{
+                        width: '75%',
+                        margin: '8px 5%',
+                        padding: '8px 10px 8px 30px',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '13px',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    {errors.phone && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.phone}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Place</label>
+                    <input type="text" placeholder="Place / Area" value={site}
+                      onChange={e => { setSite(e.target.value); clearError("site"); }}
+                      className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white ${errors.site
+                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500"
+                        : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
+                        }`}
+                    />
+                    {errors.site && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.site}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Status</label>
+                    <CustomSelect
+                      value={status}
+                      onChange={val => setStatus(val)}
+                      options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
+                      placeholder="Select Status"
+                      heightClass="h-11"
+                    />
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Step 3: Login Credentials */}
-          {currentStep === 3 && (
-            <div className="space-y-5 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
-                    Email {editingId && <span className="text-slate-400 font-normal normal-case">(read-only during update)</span>}
-                  </label>
-                  <input type="email" placeholder="guard@example.com" value={email}
-                    onChange={e => { setEmail(e.target.value); clearError("email"); }}
-                    readOnly={!!editingId}
-                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs ${
-                      editingId 
-                        ? "bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 focus:ring-transparent" 
-                        : errors.email 
-                          ? "border-red-400 focus:ring-red-500/10 focus:border-red-500 bg-[#F4F6F9]" 
+            {/* Step 2: Login Credentials */}
+            {currentStep === 2 && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Email {editingId && <span className="text-slate-400 font-normal normal-case">(read-only during update)</span>}
+                    </label>
+                    <input type="email" placeholder="guard@example.com" value={email}
+                      onChange={e => { setEmail(e.target.value); clearError("email"); }}
+                      readOnly={!!editingId}
+                      className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs ${editingId
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 focus:ring-transparent"
+                        : errors.email
+                          ? "border-red-400 focus:ring-red-500/10 focus:border-red-500 bg-[#F4F6F9]"
                           : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white"
-                    }`}
-                  />
-                  {errors.email && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.email}</p>}
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
-                    Password {editingId && <span className="text-slate-400 font-normal normal-case">(leave blank to keep current)</span>}
-                  </label>
-                  <input type="password" placeholder="Min 6 characters" value={password}
-                    onChange={e => { setPassword(e.target.value); clearError("password"); }}
-                    className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs ${
-                      errors.password 
-                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500 bg-[#F4F6F9]" 
+                        }`}
+                    />
+                    {errors.email && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.email}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Password {editingId && <span className="text-slate-400 font-normal normal-case">(leave blank to keep current)</span>}
+                    </label>
+                    <input type="password" placeholder="Min 6 characters" value={password}
+                      onChange={e => { setPassword(e.target.value); clearError("password"); }}
+                      className={`w-full h-11 border px-3 rounded-xl focus:outline-none focus:ring-4 transition text-xs ${errors.password
+                        ? "border-red-400 focus:ring-red-500/10 focus:border-red-500 bg-[#F4F6F9]"
                         : "border-slate-200 focus:ring-blue-500/10 focus:border-blue-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white"
-                    }`}
-                  />
-                  {errors.password && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.password}</p>}
+                        }`}
+                    />
+                    {errors.password && <p className="text-red-500 text-xs mt-1.5 font-semibold">⚠️ {errors.password}</p>}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Actions */}
-          <div className="flex justify-between items-center mt-8 pt-5 border-t border-slate-150">
-            <div className="flex gap-2">
-              {currentStep > 1 && (
-                <button type="button" onClick={() => setCurrentStep(currentStep - 1)}
-                  className="px-4 py-2 rounded-xl border border-slate-250 text-slate-650 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200 text-xs font-semibold flex items-center gap-1.5">
-                  <FaArrowLeft className="text-xs" />
-                  <span>Back</span>
-                </button>
-              )}
-              {editingId && (
-                <button type="button" onClick={cancelEdit}
-                  className="px-4 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50/80 transition-all duration-200 text-xs font-semibold">
-                  Cancel
-                </button>
-              )}
-            </div>
+            {/* Actions */}
+            <div className="flex justify-between items-center mt-8 pt-5 border-t border-slate-150">
+              <div className="flex gap-2">
+                {currentStep > 1 && (
+                  <button type="button" onClick={() => setCurrentStep(currentStep - 1)}
+                    className="px-4 py-2 rounded-xl border border-slate-250 text-slate-650 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200 text-xs font-semibold flex items-center gap-1.5">
+                    <FaArrowLeft className="text-xs" />
+                    <span>Back</span>
+                  </button>
+                )}
+                {editingId && (
+                  <button type="button" onClick={cancelEdit}
+                    className="px-4 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50/80 transition-all duration-200 text-xs font-semibold">
+                    Cancel
+                  </button>
+                )}
+              </div>
 
-            <div className="flex gap-2">
-              {currentStep < 3 ? (
-                <button type="button" onClick={() => {
-                  if (currentStep === 1 && !validateStep1()) return;
-                  if (currentStep === 1 && locations.length === 0) {
-                    showToast("No locations available. Please create a location first.", "info");
-                  }
-                  setCurrentStep(currentStep + 1);
-                }}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all duration-300 text-xs shadow-md shadow-blue-150 flex items-center gap-1.5">
-                  <span>Next Step</span>
-                  <FaArrowRight className="text-xs" />
-                </button>
-              ) : (
-                <button type="button" onClick={editingId ? updateGuard : addGuard} disabled={loading}
-                  className={`px-6 py-2.5 rounded-xl text-white font-bold transition-all duration-300 shadow-md flex items-center gap-2 text-xs ${
-                    loading 
-                      ? "bg-slate-350 cursor-not-allowed" 
+              <div className="flex gap-2">
+                {currentStep < 2 ? (
+                  <button type="button" onClick={() => {
+                    if (currentStep === 1 && !validateStep1()) return;
+                    setCurrentStep(currentStep + 1);
+                  }}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all duration-300 text-xs shadow-md shadow-blue-150 flex items-center gap-1.5">
+                    <span>Next Step</span>
+                    <FaArrowRight className="text-xs" />
+                  </button>
+                ) : (
+                  <button type="button" onClick={editingId ? updateGuard : addGuard} disabled={loading}
+                    className={`px-6 py-2.5 rounded-xl text-white font-bold transition-all duration-300 shadow-md flex items-center gap-2 text-xs ${loading
+                      ? "bg-slate-350 cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700 shadow-blue-150"
-                  }`}>
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>Saving…</span>
-                    </>
-                  ) : editingId ? (
-                    <>
-                      <FaCheck className="text-xs" />
-                      <span>Save Changes</span>
-                    </>
-                  ) : (
-                    <>
-                      <FaPlus className="text-xs" />
-                      <span>Onboard Guard</span>
-                    </>
-                  )}
-                </button>
-              )}
+                      }`}>
+                    {loading ? (
+                      <>
+                        <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Saving…</span>
+                      </>
+                    ) : editingId ? (
+                      <>
+                        <FaCheck className="text-xs" />
+                        <span>Save Changes</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaPlus className="text-xs" />
+                        <span>Onboard Guard</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         {/* ─── GUARDS TABLE ─── */}
@@ -1195,184 +1250,234 @@ function Guards({ onGuardAdded, onNavigate }) {
               <button
                 type="button"
                 onClick={() => {
+                  if (companyStatus === "past_due") {
+                    showToast("Payment is past due. Please update billing to add guards.", "error");
+                    return;
+                  }
                   resetForm();
                   setViewMode("form");
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 shadow-md shadow-blue-150"
+                className={`text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 shadow-md ${companyStatus === "past_due"
+                  ? "bg-gray-400 cursor-not-allowed opacity-70"
+                  : "bg-blue-600 hover:bg-blue-700 shadow-blue-150"
+                  }`}
               >
                 <FaPlus className="text-xs" />
                 <span>Onboard New Guard</span>
               </button>
             </div>
-          <div className="overflow-x-auto hidden md:block">
-            <table className="w-full border-collapse text-sm min-w-[800px]">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  {["Name", "Phone", "Email", "Site", "Location & Shift", "Status", "Actions"].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-gray-500 font-semibold text-xs uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {guards.length === 0 ? (
-                  <tr><td colSpan={7} className="p-10 text-center text-gray-400">No guards found.</td></tr>
-                ) : guards.map(guard => {
+            <div className="overflow-x-auto hidden md:block">
+              <table className="w-full border-collapse text-sm min-w-[800px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    {["Name", "Phone", "Email", "Site", "Location & Shift", "Status", "Actions"].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-gray-500 font-semibold text-xs uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {guards.length === 0 ? (
+                    <tr><td colSpan={7} className="p-10 text-center text-gray-400">No guards found.</td></tr>
+                  ) : guards.map(guard => {
+                    const eff = effectiveLocation(guard);
+                    return (
+                      <tr key={guard.id} className="border-b hover:bg-gray-50/60 transition">
+                        <td className="px-4 py-3 font-semibold text-gray-800">{guard.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{guard.phone}</td>
+                        <td className="px-4 py-3 text-gray-500">{guard.email || guard.profiles?.email || "—"}</td>
+                        <td className="px-4 py-3 text-gray-600">{guard.site}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedShiftGuard(guard)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <FaCalendarAlt className="text-xs" />
+                            <span>View Details</span>
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`status-chip status-chip-${guard.status.toLowerCase()}`}>
+                            {guard.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+
+                            <button onClick={() => startEdit(guard)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 shadow-sm shadow-blue-100">
+                              <FaPen className="text-[10px]" />
+                              <span>Edit</span>
+                            </button>
+                            <button onClick={() => setConfirmDelete({ id: guard.id, name: guard.name })}
+                              className="bg-red-500 hover:bg-red-650 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 shadow-sm shadow-red-100">
+                              <FaTrashAlt className="text-[10px]" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile list view */}
+            <div className="block md:hidden divide-y divide-gray-100">
+              {guards.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">No guards found.</div>
+              ) : (
+                guards.map(guard => {
                   const eff = effectiveLocation(guard);
                   return (
-                    <tr key={guard.id} className="border-b hover:bg-gray-50/60 transition">
-                      <td className="px-4 py-3 font-semibold text-gray-800">{guard.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{guard.phone}</td>
-                      <td className="px-4 py-3 text-gray-500">{guard.email || guard.profiles?.email || "—"}</td>
-                      <td className="px-4 py-3 text-gray-600">{guard.site}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedShiftGuard(guard)}
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap"
-                        >
-                          <FaCalendarAlt className="text-xs" />
-                          <span>View Details</span>
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
+                    <div key={guard.id} className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-gray-800 text-sm">{guard.name}</h4>
+                          <p className="text-xs text-gray-500 mt-0.5">{guard.email || guard.profiles?.email || "No email"}</p>
+                        </div>
                         <span className={`status-chip status-chip-${guard.status.toLowerCase()}`}>
                           {guard.status}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button onClick={() => {
-                            setOverrideGuard(guard);
-                            setTempLocationId(guard.temp_location_id ? String(guard.temp_location_id) : "");
-                            setTempFrom(guard.temp_location_from || "");
-                            setTempTo(guard.temp_location_to || "");
-                            if (guard.tempShifts && guard.tempShifts.length > 0) {
-                              const tShift = guard.tempShifts[0];
-                              setTempShiftName(tShift.shift_name || "");
-                              setTempStartTime(tShift.start_time || "");
-                              setTempEndTime(tShift.end_time || "");
-                            } else {
-                              setTempShiftName("");
-                              setTempStartTime("");
-                              setTempEndTime("");
-                            }
-                          }}
-                            className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shadow-sm shadow-amber-100">
-                            <FaClock className="text-xs" />
-                            <span>Temp Override</span>
-                          </button>
-                          <button onClick={() => startEdit(guard)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 shadow-sm shadow-blue-100">
-                            <FaPen className="text-[10px]" />
-                            <span>Edit</span>
-                          </button>
-                          <button onClick={() => setConfirmDelete({ id: guard.id, name: guard.name })}
-                            className="bg-red-500 hover:bg-red-650 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 shadow-sm shadow-red-100">
-                            <FaTrashAlt className="text-[10px]" />
-                            <span>Delete</span>
-                          </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2.5 rounded-xl">
+                        <div>
+                          <span className="font-semibold block text-gray-400">Phone:</span>
+                          {guard.phone || "—"}
                         </div>
-                      </td>
-                    </tr>
+                        <div>
+                          <span className="font-semibold block text-gray-400">Site:</span>
+                          {guard.site}
+                        </div>
+                        <div className="col-span-2">
+                          <span className="font-semibold block text-gray-400">Location:</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="font-medium text-gray-850">{eff.name}</span>
+                            {eff.isTemp && (
+                              <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">TEMP OVERRIDE</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedShiftGuard(guard)}
+                          className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-2 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap text-center flex items-center justify-center gap-1"
+                        >
+                          <FaCalendarAlt className="text-[10px]" />
+                          <span>Schedule</span>
+                        </button>
+
+                        <button
+                          onClick={() => startEdit(guard)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
+                        >
+                          <FaPen className="text-[9px]" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete({ id: guard.id, name: guard.name })}
+                          className="bg-red-500 hover:bg-red-650 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
+                        >
+                          <FaTrashAlt className="text-[9px]" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
+                })
+              )}
+            </div>
           </div>
-
-          {/* Mobile list view */}
-          <div className="block md:hidden divide-y divide-gray-100">
-            {guards.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">No guards found.</div>
-            ) : (
-              guards.map(guard => {
-                const eff = effectiveLocation(guard);
-                return (
-                  <div key={guard.id} className="p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-bold text-gray-800 text-sm">{guard.name}</h4>
-                        <p className="text-xs text-gray-500 mt-0.5">{guard.email || guard.profiles?.email || "No email"}</p>
-                      </div>
-                      <span className={`status-chip status-chip-${guard.status.toLowerCase()}`}>
-                        {guard.status}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2.5 rounded-xl">
-                      <div>
-                        <span className="font-semibold block text-gray-400">Phone:</span>
-                        {guard.phone || "—"}
-                      </div>
-                      <div>
-                        <span className="font-semibold block text-gray-400">Site:</span>
-                        {guard.site}
-                      </div>
-                      <div className="col-span-2">
-                        <span className="font-semibold block text-gray-400">Location:</span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="font-medium text-gray-850">{eff.name}</span>
-                          {eff.isTemp && (
-                            <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">TEMP OVERRIDE</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedShiftGuard(guard)}
-                        className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 px-2 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap text-center flex items-center justify-center gap-1"
-                      >
-                        <FaCalendarAlt className="text-[10px]" />
-                        <span>Schedule</span>
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setOverrideGuard(guard);
-                          setTempLocationId(guard.temp_location_id ? String(guard.temp_location_id) : "");
-                          setTempFrom(guard.temp_location_from || "");
-                          setTempTo(guard.temp_location_to || "");
-                          if (guard.tempShifts && guard.tempShifts.length > 0) {
-                            const tShift = guard.tempShifts[0];
-                            setTempShiftName(tShift.shift_name || "");
-                            setTempStartTime(tShift.start_time || "");
-                            setTempEndTime(tShift.end_time || "");
-                          } else {
-                            setTempShiftName("");
-                            setTempStartTime("");
-                            setTempEndTime("");
-                          }
-                        }}
-                        className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
-                      >
-                        <FaClock className="text-[10px]" />
-                        <span>Temp</span>
-                      </button>
-                      <button 
-                        onClick={() => startEdit(guard)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
-                      >
-                        <FaPen className="text-[9px]" />
-                        <span>Edit</span>
-                      </button>
-                      <button 
-                        onClick={() => setConfirmDelete({ id: guard.id, name: guard.name })}
-                        className="bg-red-500 hover:bg-red-650 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1"
-                      >
-                        <FaTrashAlt className="text-[9px]" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
         )}
       </div>
+
+      {showLimitPopup && (
+        <div className="fixed inset-0 z-[100] bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
+            <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+              ⚠️
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Seat Limit Reached</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              You have reached your limit of {purchasedSeats} active guard seats. Please upgrade your plan to add more guards.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  setShowLimitPopup(false);
+                  onNavigate("billing");
+                }}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition shadow-md"
+              >
+                Go to Billing
+              </button>
+              <button
+                onClick={() => setShowLimitPopup(false)}
+                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {newGuardCredentials && (
+        <div className="fixed inset-0 z-[100] bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-[2rem] p-6 max-w-md w-full shadow-2xl text-center animate-scale-up">
+            <div className="w-12 h-12 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+              <FaCheck />
+            </div>
+            <h2 className="text-lg font-bold text-gray-800 mb-1">Guard Added Successfully</h2>
+            <p className="text-gray-500 text-[11px] mb-5">
+              Please save or send these login credentials to the guard.
+            </p>
+            
+            <div className="bg-gray-50/80 p-4 rounded-2xl text-left mb-6 border border-gray-100 shadow-sm">
+              <div className="mb-3">
+                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Email</span>
+                <div className="text-gray-700 font-semibold text-sm select-all">{newGuardCredentials.email}</div>
+              </div>
+              <div>
+                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Password</span>
+                <div className="text-gray-700 font-semibold text-sm select-all">{newGuardCredentials.password}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 px-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`Email: ${newGuardCredentials.email}\nPassword: ${newGuardCredentials.password}`);
+                  showToast("Credentials copied to clipboard", "success");
+                }}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition shadow-md flex items-center justify-center gap-1.5 text-xs"
+              >
+                <FaCopy /> Copy
+              </button>
+              
+              <a
+                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${newGuardCredentials.email}&su=Login Credentials for SecureSys&body=Hi ${newGuardCredentials.name},%0D%0A%0D%0AHere are your login credentials for SecureSys:%0D%0A%0D%0AEmail: ${newGuardCredentials.email}%0D%0APassword: ${newGuardCredentials.password}%0D%0A%0D%0APlease keep these safe and change your password upon first login.`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition shadow-md flex items-center justify-center gap-1.5 text-xs"
+              >
+                <FaEnvelope /> Gmail
+              </a>
+
+              <button
+                onClick={() => setNewGuardCredentials(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition flex items-center justify-center gap-1.5 text-xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

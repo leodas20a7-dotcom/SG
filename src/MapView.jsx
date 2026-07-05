@@ -47,7 +47,7 @@ export function getGeofencePolygonPoints(centerLat, centerLng, radiusMeters) {
   return points;
 }
 
-function MapView() {
+function MapView({ companyId }) {
   const [guardsOnDuty, setGuardsOnDuty] = useState([]);
   const [dutyLocations, setDutyLocations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,46 +65,69 @@ function MapView() {
     try {
       const today = new Date().toISOString().split("T")[0];
       
-      // Query active tracking records. We join with guards and attendance.
-      const { data: tracking } = await supabase
-        .from("live_tracking")
-        .select("*, guards(name), attendance!inner(id, check_in_time, check_out_time, duty_locations(place_name))")
-        .is("attendance.check_out_time", null) // Only active duties
-        .gte("attendance.check_in_time", today) // Started today
-        .order("tracked_at", { ascending: false });
+      // 1. Fetch active attendance records
+      let qAtt = supabase
+        .from("attendance")
+        .select("*, guards(name), duty_locations(place_name, latitude, longitude)")
+        .is("check_out_time", null)
+        .gte("check_in_time", today);
+      if (companyId) qAtt = qAtt.eq("company_id", companyId);
+      const { data: activeAttendance } = await qAtt;
 
-      if (tracking && tracking.length > 0) {
-        const latest = {};
-        tracking.forEach((t) => {
-          const gid = t.guard_id;
-          if (!latest[gid]) {
-            const locName = t.attendance?.duty_locations?.place_name;
-            latest[gid] = {
-              lat: t.latitude,
-              lng: t.longitude,
-              time: t.tracked_at,
-              guardName: t.guards?.name || "Unknown",
-              locationName: locName || null
-            };
+      // 2. Fetch live tracking for today
+      let qLT = supabase
+        .from("live_tracking")
+        .select("*")
+        .gte("tracked_at", today + "T00:00:00")
+        .order("tracked_at", { ascending: false });
+      if (companyId) qLT = qLT.eq("company_id", companyId);
+      const { data: tracking } = await qLT;
+
+      const latestTracking = {};
+      if (tracking) {
+        tracking.forEach(t => {
+          if (!latestTracking[t.guard_id]) {
+            latestTracking[t.guard_id] = t;
           }
         });
-        setGuardsOnDuty(Object.keys(latest).map((id) => ({ id, ...latest[id] })));
+      }
+
+      if (activeAttendance && activeAttendance.length > 0) {
+        const onDuty = activeAttendance.map(att => {
+          const gid = att.guard_id;
+          const track = latestTracking[gid];
+          
+          return {
+            id: gid,
+            lat: track ? track.latitude : att.duty_locations?.latitude,
+            lng: track ? track.longitude : att.duty_locations?.longitude,
+            time: track ? track.tracked_at : att.check_in_time,
+            guardName: att.guards?.name || "Unknown",
+            locationName: att.duty_locations?.place_name || null
+          };
+        }).filter(g => g.lat && g.lng); // Only include if we have SOME coordinates
+        
+        setGuardsOnDuty(onDuty);
       } else {
         setGuardsOnDuty([]);
       }
 
       // Fetch all today's coordinate pings for the patrol trail heatmap
-      const { data: trailPoints } = await supabase
+      let qTrail = supabase
         .from("live_tracking")
         .select("latitude, longitude")
         .gte("tracked_at", today + "T00:00:00");
+      if (companyId) qTrail = qTrail.eq("company_id", companyId);
+      const { data: trailPoints } = await qTrail;
       setPatrolTrailPoints(trailPoints || []);
 
       // Fetch incidents with guard's assigned location coordinates for plotting incident density
-      const { data: inc } = await supabase
+      let qInc = supabase
         .from("incidents")
         .select("*, guards(name, duty_location_id, duty_locations:duty_locations!duty_location_id(latitude, longitude, place_name))")
         .order("created_at", { ascending: false });
+      if (companyId) qInc = qInc.eq("company_id", companyId);
+      const { data: inc } = await qInc;
       setIncidents(inc || []);
 
     } catch (err) {
@@ -115,7 +138,9 @@ function MapView() {
 
   async function fetchDutyLocations() {
     try {
-      const { data } = await supabase.from("duty_locations").select("*");
+      let qL = supabase.from("duty_locations").select("*");
+      if (companyId) qL = qL.eq("company_id", companyId);
+      const { data } = await qL;
       setDutyLocations(data || []);
     } catch { /* ignore */ }
   }
@@ -161,22 +186,7 @@ function MapView() {
               <p className="text-xs text-slate-450 mt-1">Monitor guards on duty and coordinate site coverage in real-time.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setHeatmapMode(!heatmapMode)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 shadow-sm ${
-                  heatmapMode ? "bg-orange-600 text-white hover:bg-orange-700 shadow-orange-100" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                🔥 {heatmapMode ? "Hide Heatmap" : "Patrol Heatmap"}
-              </button>
-              <button
-                onClick={() => setShowIncidentDensity(!showIncidentDensity)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 shadow-sm ${
-                  showIncidentDensity ? "bg-red-600 text-white hover:bg-red-700 shadow-red-100" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                🚨 {showIncidentDensity ? "Hide Incidents" : "Incident Density"}
-              </button>
+
               <button
                 onClick={() => setShowMap(!showMap)}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${

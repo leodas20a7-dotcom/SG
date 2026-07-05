@@ -70,7 +70,7 @@ const waypointIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
-function Analytics({ role, onNavigate }) {
+function Analytics({ role, onNavigate, companyId }) {
   const { showToast, ToastContainer } = useToast();
   const { t } = useLanguage();
 
@@ -122,25 +122,41 @@ function Analytics({ role, onNavigate }) {
     // Fetch basic counts and dashboard analytics
   async function fetchSummary() {
     try {
-      const { count: guardsCount } = await supabase.from("guards").select("*", { count: "exact", head: true });
+      let qGuards = supabase.from("guards").select("*", { count: "exact", head: true });
+      let qLocs = supabase.from("duty_locations").select("*", { count: "exact", head: true });
+      let qAttActive = supabase.from("attendance").select("guard_id").is("check_out_time", null);
+      let qShifts = supabase.from("shifts").select("*", { count: "exact", head: true });
+      let qIncidents = supabase.from("incidents").select("*", { count: "exact", head: true });
+      let qAttCompleted = supabase.from("attendance").select("*", { count: "exact", head: true }).not("check_out_time", "is", null);
+
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qGuards = qGuards.eq("company_id", companyId);
+        qLocs = qLocs.eq("company_id", companyId);
+        qAttActive = qAttActive.eq("company_id", companyId);
+        qShifts = qShifts.eq("company_id", companyId);
+        qIncidents = qIncidents.eq("company_id", companyId);
+        qAttCompleted = qAttCompleted.eq("company_id", companyId);
+      }
+
+      const { count: guardsCount } = await qGuards;
       const finalGuardsCount = guardsCount || 0;
       setTotalGuards(finalGuardsCount);
 
-      const { count: locationsCount } = await supabase.from("duty_locations").select("*", { count: "exact", head: true });
+      const { count: locationsCount } = await qLocs;
       setTotalLocations(locationsCount || 0);
 
-      const { count: activeCount } = await supabase.from("attendance").select("*", { count: "exact", head: true }).is("check_out_time", null);
-      const finalActiveCount = activeCount || 0;
+      const { data: activeAttData } = await qAttActive;
+      const finalActiveCount = activeAttData ? new Set(activeAttData.map(a => a.guard_id)).size : 0;
       setActiveGuards(finalActiveCount);
 
-      const { count: shiftsCount } = await supabase.from("shifts").select("*", { count: "exact", head: true });
+      const { count: shiftsCount } = await qShifts;
       setTotalShifts(shiftsCount || 0);
 
-      const { count: incidentsCount } = await supabase.from("incidents").select("*", { count: "exact", head: true });
+      const { count: incidentsCount } = await qIncidents;
       setTotalIncidents(incidentsCount || 0);
 
       // --- 1. Fetch Patrol Status ---
-      const { count: completedCount } = await supabase.from("attendance").select("*", { count: "exact", head: true }).not("check_out_time", "is", null);
+      const { count: completedCount } = await qAttCompleted;
       const patCompleted = completedCount || 0;
       const patInProgress = finalActiveCount;
       const patPending = Math.max(0, finalGuardsCount - patCompleted - patInProgress);
@@ -152,7 +168,11 @@ function Analytics({ role, onNavigate }) {
       }
 
       // --- 2. Fetch Shift Overview ---
-      const { data: shiftsData } = await supabase.from("shifts").select("shift_name");
+      let qShiftsList = supabase.from("shifts").select("shift_name");
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qShiftsList = qShiftsList.eq("company_id", companyId);
+      }
+      const { data: shiftsData } = await qShiftsList;
       let morning = 0;
       let afternoon = 0;
       let night = 0;
@@ -176,11 +196,15 @@ function Analytics({ role, onNavigate }) {
       const activityList = [];
 
       // A. Latest attendance check-ins
-      const { data: recentAtt } = await supabase
+      let qRecentAtt = supabase
         .from("attendance")
         .select("*, guards(name), duty_locations(place_name)")
         .order("check_in_time", { ascending: false })
         .limit(3);
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qRecentAtt = qRecentAtt.eq("company_id", companyId);
+      }
+      const { data: recentAtt } = await qRecentAtt;
 
       if (recentAtt) {
         recentAtt.forEach(item => {
@@ -209,11 +233,15 @@ function Analytics({ role, onNavigate }) {
       }
 
       // B. Latest incidents
-      const { data: recentInc } = await supabase
+      let qRecentInc = supabase
         .from("incidents")
         .select("*, guards(name)")
         .order("created_at", { ascending: false })
         .limit(2);
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qRecentInc = qRecentInc.eq("company_id", companyId);
+      }
+      const { data: recentInc } = await qRecentInc;
 
       if (recentInc) {
         recentInc.forEach(item => {
@@ -228,11 +256,15 @@ function Analytics({ role, onNavigate }) {
       }
 
       // C. Latest guards
-      const { data: recentGuards } = await supabase
+      let qRecentGuards = supabase
         .from("guards")
         .select("*")
         .order("id", { ascending: false })
         .limit(2);
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qRecentGuards = qRecentGuards.eq("company_id", companyId);
+      }
+      const { data: recentGuards } = await qRecentGuards;
 
       if (recentGuards) {
         recentGuards.forEach(item => {
@@ -292,17 +324,25 @@ function Analytics({ role, onNavigate }) {
       sunday.setDate(monday.getDate() + 6);
       sunday.setHours(23,59,59,999);
 
-      const { data: weeklyAtt } = await supabase
+      let qWeeklyAtt = supabase
         .from("attendance")
         .select("check_in_time")
         .gte("check_in_time", monday.toISOString())
         .lte("check_in_time", sunday.toISOString());
 
-      const { data: weeklyInc } = await supabase
+      let qWeeklyInc = supabase
         .from("incidents")
         .select("created_at")
         .gte("created_at", monday.toISOString())
         .lte("created_at", sunday.toISOString());
+
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qWeeklyAtt = qWeeklyAtt.eq("company_id", companyId);
+        qWeeklyInc = qWeeklyInc.eq("company_id", companyId);
+      }
+
+      const { data: weeklyAtt } = await qWeeklyAtt;
+      const { data: weeklyInc } = await qWeeklyInc;
 
       let patrols = [0, 0, 0, 0, 0, 0, 0];
       let incidents = [0, 0, 0, 0, 0, 0, 0];
@@ -345,9 +385,15 @@ function Analytics({ role, onNavigate }) {
   // Fetch basic lookup data
   async function fetchLookups() {
     try {
-      const { data: g } = await supabase.from("guards").select("id, name").order("name");
+      let qG = supabase.from("guards").select("id, name").order("name");
+      let qL = supabase.from("duty_locations").select("id, place_name").order("place_name");
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qG = qG.eq("company_id", companyId);
+        qL = qL.eq("company_id", companyId);
+      }
+      const { data: g } = await qG;
       setGuards(g || []);
-      const { data: l } = await supabase.from("duty_locations").select("id, place_name").order("place_name");
+      const { data: l } = await qL;
       setLocations(l || []);
     } catch { /* ignore */ }
   }
@@ -360,16 +406,24 @@ function Analytics({ role, onNavigate }) {
     }
     try {
       // 1. Get attendance records
-      const { data: att } = await supabase
+      let qAtt = supabase
         .from("attendance")
         .select(`*, duty_locations(place_name)`)
         .eq("guard_id", guardId);
 
       // 2. Get shift schedules
-      const { data: sh } = await supabase
+      let qSh = supabase
         .from("shifts")
         .select("*")
         .eq("guard_id", guardId);
+
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qAtt = qAtt.eq("company_id", companyId);
+        qSh = qSh.eq("company_id", companyId);
+      }
+
+      const { data: att } = await qAtt;
+      const { data: sh } = await qSh;
 
       // 3. Get reported incidents
       const { count: incCount } = await supabase
@@ -441,13 +495,19 @@ function Analytics({ role, onNavigate }) {
   async function loadPatrolHistory() {
     if (!selectedPatrolGuard) return;
     try {
-      const { data, error } = await supabase
+      let qLT = supabase
         .from("live_tracking")
         .select("*")
         .eq("guard_id", selectedPatrolGuard)
         .gte("tracked_at", selectedPatrolDate + "T00:00:00")
         .lte("tracked_at", selectedPatrolDate + "T23:59:59")
         .order("tracked_at", { ascending: true });
+
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        qLT = qLT.eq("company_id", companyId);
+      }
+
+      const { data, error } = await qLT;
 
       if (error) throw error;
 
@@ -490,6 +550,9 @@ function Analytics({ role, onNavigate }) {
       if (filterLocation) query = query.eq("duty_location_id", filterLocation);
       if (filterStartDate) query = query.gte("check_in_time", filterStartDate + "T00:00:00");
       if (filterEndDate) query = query.lte("check_in_time", filterEndDate + "T23:59:59");
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        query = query.eq("company_id", companyId);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -502,10 +565,16 @@ function Analytics({ role, onNavigate }) {
   // Load Incident analytics & charts
   async function loadIncidentStats() {
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from("incidents")
         .select(`*, guards(name)`)
         .order("created_at", { ascending: false });
+        
+      if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
+        q = q.eq("company_id", companyId);
+      }
+
+      const { data, error } = await q;
 
       if (error) throw error;
       setIncidentsRecords(data || []);
@@ -844,7 +913,7 @@ function Analytics({ role, onNavigate }) {
                       scales: {
                         y: {
                           min: 0,
-                          grid: { color: "rgba(241, 245, 249, 0.6)" },
+                          grid: { color: "rgba(148, 163, 184, 0.1)" },
                           ticks: {
                             color: "#94a3b8",
                             font: { size: 10, weight: "500" }

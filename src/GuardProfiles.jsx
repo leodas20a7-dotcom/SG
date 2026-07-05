@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 
-function GuardProfiles() {
+function GuardProfiles({ companyId }) {
   const [guards, setGuards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedGuard, setSelectedGuard] = useState(null);
@@ -43,7 +43,9 @@ function GuardProfiles() {
   async function fetchGuards() {
     setLoading(true);
     try {
-      const { data } = await supabase.from("guards").select("*").order("name");
+      let q = supabase.from("guards").select("*").order("name");
+      if (companyId) q = q.eq("company_id", companyId);
+      const { data } = await q;
       setGuards(data || []);
     } catch {
       // ignore

@@ -26,7 +26,7 @@ function ChangeMapView({ coords }) {
   return null;
 }
 
-function DutyLocations() {
+function DutyLocations({ companyId }) {
   const [locations, setLocations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [placeName, setPlaceName] = useState("");
@@ -156,6 +156,7 @@ function DutyLocations() {
     setLoading(true);
     try {
       const payload = {
+        company_id: companyId,
         place_name: placeName.trim(),
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),

@@ -19,6 +19,38 @@ function Settings({ onStartTour }) {
   const { showToast, ToastContainer } = useToast();
   const [shiftTimings, setShiftTimings] = useState(DEFAULT_TIMINGS);
   const [activeDetailsModal, setActiveDetailsModal] = useState(null);
+  
+  const [timezone, setTimezone] = useState("UTC");
+  const [companyId, setCompanyId] = useState(null);
+  const TIMEZONES = Intl.supportedValuesOf('timeZone');
+
+  useEffect(() => {
+    async function loadCompanySettings() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+      if (profile?.company_id) {
+        setCompanyId(profile.company_id);
+        const { data: company } = await supabase.from("companies").select("timezone").eq("id", profile.company_id).single();
+        if (company?.timezone) setTimezone(company.timezone);
+      }
+    }
+    loadCompanySettings();
+  }, []);
+
+  async function saveTimezone() {
+    if (!companyId) return;
+    setLoading(true);
+    setLoadingMsg("Saving time zone...");
+    try {
+      const { error } = await supabase.from("companies").update({ timezone }).eq("id", companyId);
+      if (error) throw error;
+      showToast("Time zone updated globally!", "success");
+    } catch (e) {
+      showToast("Failed to update time zone.", "error");
+    }
+    setLoading(false);
+  }
 
   async function fetchTimings() {
     try {
@@ -392,6 +424,10 @@ function Settings({ onStartTour }) {
                       <li>Staff Registry management and Guard presets</li>
                       <li>Roster planning and shift settings</li>
                       <li>Incident logging and audio reports</li>
+                      <li>System Access and admin permissions</li>
+                      <li>Company Circulars and announcements</li>
+                      <li>Leave Requests and guard approvals</li>
+                      <li>Billing, Subscriptions, and Settings</li>
                     </ul>
                   </div>
                   <p>
@@ -423,7 +459,7 @@ function Settings({ onStartTour }) {
 
       <div className="space-y-8 w-full">
         {/* System Cleanup Settings Section - Soft Purple Tint */}
-        <div className="glass-card p-6 bg-[#F8F5FF] border border-purple-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+        <div className="tour-settings-target relative glass-card p-6 bg-[#F8F5FF] border border-purple-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
           <h2 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
             <span>⚙️</span>
             <span>System Cleanup Settings</span>
@@ -444,7 +480,7 @@ function Settings({ onStartTour }) {
               </div>
               <button
                 onClick={() => setActiveDetailsModal('photos')}
-                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 dark:text-indigo-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
                 More Details
               </button>
@@ -461,7 +497,7 @@ function Settings({ onStartTour }) {
               </div>
               <button
                 onClick={() => setActiveDetailsModal('voices')}
-                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 dark:text-indigo-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
                 More Details
               </button>
@@ -478,7 +514,7 @@ function Settings({ onStartTour }) {
               </div>
               <button
                 onClick={() => setActiveDetailsModal('incidents')}
-                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-750 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 dark:text-indigo-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
                 More Details
               </button>
@@ -495,12 +531,42 @@ function Settings({ onStartTour }) {
               </div>
               <button
                 onClick={() => setActiveDetailsModal('tour')}
-                className="w-full py-2 bg-[#e6fcf5] hover:bg-[#cbf7ea] text-emerald-800 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
+                className="w-full py-2 bg-[#e6fcf5] hover:bg-[#cbf7ea] text-emerald-800 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer text-center"
               >
                 More Details
               </button>
             </div>
 
+          </div>
+        </div>
+
+        {/* Time Zone Configuration Card - Soft Indigo Tint */}
+        <div className="glass-card p-6 bg-[#F8F9FE] border border-indigo-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <h2 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
+            <span>🌍</span>
+            <span>Organization Time Zone</span>
+          </h2>
+          <p className="text-xs text-slate-500 font-medium mb-6">Select the timezone your organization operates in. All attendance logs, dashboards, and exported reports will be automatically converted from UTC server time to this timezone.</p>
+          
+          <div className="p-4 bg-white rounded-2xl border border-slate-100/80 shadow-sm">
+            <label className="block text-[10px] text-slate-400 mb-1 font-bold uppercase tracking-wider">Select Time Zone</label>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="w-full md:w-1/2 h-10 border border-gray-200 px-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white text-xs transition mb-4"
+            >
+              {TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <div className="flex justify-end pt-2 border-t border-slate-150">
+              <button
+                onClick={saveTimezone}
+                className="btn-primary-premium px-5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
+              >
+                Save Time Zone
+              </button>
+            </div>
           </div>
         </div>
 

@@ -3,22 +3,22 @@ import { supabase } from "./lib/supabase";
 import Camera from "./Camera";
 import { calcDistance, getLocation, uploadPhoto, calculateAttendanceStatus } from "./lib/geoUtils";
 import Notifications from "./Notifications";
+import DarkModeToggle from "./DarkModeToggle";
 
 const Incidents = React.lazy(() => import("./Incidents"));
 import { addToQueue, getQueue, removeFromQueue, setCached, getCached } from "./lib/offlineDb";
 import { useToast } from "./Toast";
 import { useLanguage } from "./LanguageContext";
 import LoadingOverlay from "./LoadingOverlay";
-import { FaMapMarkerAlt, FaClipboardList, FaBell, FaBullhorn, FaPause, FaCamera, FaSatelliteDish, FaCheckCircle, FaCalendarDay, FaUser, FaSignOutAlt, FaPlay, FaCircle } from "react-icons/fa";
+import { formatLocalTime, formatLocalDate } from "./lib/timeUtils";
+import { FaMapMarkerAlt, FaClipboardList, FaBell, FaBullhorn, FaPause, FaCamera, FaSatelliteDish, FaCheckCircle, FaCalendarDay, FaUser, FaSignOutAlt, FaPlay, FaCircle, FaExclamationTriangle } from "react-icons/fa";
 
 /* ─── helpers ─────────────────────────────────────── */
 function fmt(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatLocalTime(iso);
 }
 function fmtDate(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
+  return formatLocalDate(iso);
 }
 
 function AudioPlayer({ src }) {
@@ -371,10 +371,40 @@ function GuardProfilePanel({ guardId, onClose, onSosPanic, sendingSos }) {
 /* ══════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════ */
-function GuardDuty({ guardId, guardName }) {
+function GuardDuty({ guardId, guardName, companyId }) {
   const appLogo = "/logo.png";
   const { t, locale, setLocale } = useLanguage();
-  const [activeTab, setActiveTab] = useState("duty");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && TABS.some(tab => tab.key === hash)) return hash;
+    }
+    return "duty";
+  });
+
+  // Sync activeTab state to URL hash
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const currentHash = window.location.hash.replace('#', '');
+      if (currentHash !== activeTab) {
+        window.history.pushState(null, '', `#${activeTab}`);
+      }
+    }
+  }, [activeTab]);
+
+  // Listen to browser Back/Forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && TABS.some(tab => tab.key === hash)) {
+        setActiveTab(hash);
+      } else {
+        setActiveTab("duty");
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   const [showRequestHistory, setShowRequestHistory] = useState(false);
   const [dutyLocation, setDutyLocation] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -389,6 +419,9 @@ function GuardDuty({ guardId, guardName }) {
   const [isOnLeaveToday, setIsOnLeaveToday] = useState(false);
   const [showLeaveHistory, setShowLeaveHistory] = useState(false);
   const [leaveHistory, setLeaveHistory] = useState([]);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
   const { showToast, ToastContainer } = useToast();
 
   function handleSosPanic() {
@@ -415,10 +448,15 @@ function GuardDuty({ guardId, guardName }) {
       const assignedLoc = dutyLocation?.place_name || "No assigned site";
       const detailedMessage = `GUARD IN EMERGENCY! Name: ${guardName}. Assigned Site: ${assignedLoc}. Current GPS coordinates: ${locMsg}.`;
 
+      // Fetch company_id
+      const { data: guardRecord } = await supabase.from("guards").select("company_id").eq("id", guardId).single();
+      const compId = guardRecord?.company_id;
+
       // Insert notification for Admin
       const { error: insErr } = await supabase.from("notifications").insert([{
-        user_role: "admin",
+        user_role: "super_admin",
         guard_id: guardId,
+        company_id: compId,
         title: "🚨 SOS PANIC ALERT",
         message: detailedMessage,
         type: "error",
@@ -436,6 +474,7 @@ function GuardDuty({ guardId, guardName }) {
   }
 
   const [gpsStatus, setGpsStatus] = useState(null);
+  const [historyLimit, setHistoryLimit] = useState(10);
   const [gpsType, setGpsType] = useState("info");
   const [showCamera, setShowCamera] = useState(false);
   const [cameraMode, setCameraMode] = useState(null);
@@ -519,9 +558,13 @@ function GuardDuty({ guardId, guardName }) {
 
             // Fetch active shift
             const { data: guardShifts } = await supabase.from("shifts").select("*").eq("guard_id", guardId);
-            const tempShift = (guardShifts || []).find(s => s.shift_date === checkInDate);
-            const constantShift = (guardShifts || []).find(s => s.shift_date === null);
-            const activeShiftObj = tempShift || constantShift || null;
+            const jsDay = new Date(checkInDate).getDay();
+            const checkInDow = jsDay === 0 ? 6 : jsDay - 1;
+            const dateOverride = (guardShifts || []).find(s => s.shift_date === checkInDate);
+            const weeklyShiftObj = (guardShifts || []).find(s =>
+              s.shift_date === null && s.day_of_week !== null && s.day_of_week !== undefined && s.day_of_week === checkInDow
+            );
+            const activeShiftObj = dateOverride || weeklyShiftObj || null;
 
             const calculatedStatus = calculateAttendanceStatus(checkInTime, timestamp, activeShiftObj);
 
@@ -550,6 +593,7 @@ function GuardDuty({ guardId, guardName }) {
               } else throw upErr;
             }
             const { error: insErr } = await supabase.from("attendance_requests").insert([{
+              company_id: companyId,
               guard_id: guardId,
               request_type: requestType,
               message: message,
@@ -603,6 +647,19 @@ function GuardDuty({ guardId, guardName }) {
               },
             ]);
             if (error) throw error;
+
+            // Generate notification for Admins
+            const { data: guardRecord } = await supabase.from("guards").select("company_id").eq("id", guardId).single();
+            await supabase.from("notifications").insert([{
+              user_role: "super_admin",
+              company_id: guardRecord?.company_id,
+              guard_id: guardId,
+              title: `🚨 New Incident: ${incidentType}`,
+              message: description || "Reported with media",
+              type: "error",
+              is_read: false,
+              created_at: timestamp
+            }]);
           }
 
           // Successfully synced, remove from local queue
@@ -646,75 +703,54 @@ function GuardDuty({ guardId, guardName }) {
         const cached = getCached(`assigned_location_${guardId}`);
         if (cached) {
           setDutyLocation(cached.dutyLocation);
-          setIsOnTempDuty(cached.isOnTempDuty);
-          setPrimaryLocation(cached.primaryLocation);
           setActiveShift(cached.activeShift || null);
         }
         return;
       }
-
-      const { data } = await supabase
-        .from("guards")
-        .select(`
-          duty_location_id,
-          duty_locations!duty_location_id(*),
-          temp_location_id,
-          temp_location_from,
-          temp_location_to,
-          temp_duty_location:temp_location_id(*)
-        `)
-        .eq("id", guardId)
-        .single();
-
-      if (!data) return;
-
-      // Store primary location always
-      const primary = data.duty_locations || null;
-      setPrimaryLocation(primary);
-
-      // Check if today is within the temp override window
-      const today = new Date().toISOString().split("T")[0];
-      const hasTemp =
-        data.temp_location_id &&
-        data.temp_location_from &&
-        data.temp_location_to &&
-        today >= data.temp_location_from &&
-        today <= data.temp_location_to;
-
-      let finalLoc = primary;
-      let finalIsTemp = false;
-
-      if (hasTemp) {
-        // Use temp location for GPS checks and attendance
-        finalLoc = data.temp_duty_location;
-        finalIsTemp = true;
-      }
-      setDutyLocation(finalLoc);
-      setIsOnTempDuty(finalIsTemp);
-
-      // Query active shift
+      // Query active shift — use day-of-week based weekly schedule
       const { data: shiftsData } = await supabase
         .from("shifts")
         .select("*")
         .eq("guard_id", guardId);
 
-      const tempShift = (shiftsData || []).find(s => s.shift_date === today);
-      const constantShift = (shiftsData || []).find(s => s.shift_date === null);
-      const shift = tempShift || constantShift || null;
+      const today = new Date().toISOString().split("T")[0];
+      const jsDay = new Date().getDay(); 
+      const todayDow = jsDay === 0 ? 6 : jsDay - 1; 
+
+      const dateOverride = (shiftsData || []).find(s => s.shift_date === today);
+      const weeklyShift = (shiftsData || []).find(s =>
+        s.shift_date === null &&
+        s.day_of_week !== null &&
+        s.day_of_week !== undefined &&
+        s.day_of_week === todayDow
+      );
+      const shift = dateOverride || weeklyShift || null;
       setActiveShift(shift);
 
+      // If shift has a specific duty location assigned, fetch its details
+      if (shift && shift.duty_location_id) {
+        const { data: shiftLoc } = await supabase
+          .from("duty_locations")
+          .select("*")
+          .eq("id", shift.duty_location_id)
+          .single();
+        if (shiftLoc) {
+          setDutyLocation(shiftLoc);
+        } else {
+          setDutyLocation(null);
+        }
+      } else {
+        setDutyLocation(null);
+      }
+
       setCached(`assigned_location_${guardId}`, {
-        dutyLocation: finalLoc,
-        isOnTempDuty: finalIsTemp,
-        primaryLocation: primary,
+        dutyLocation: shift && shift.duty_location_id ? dutyLocation : null, // Will be updated by state but cache might be one cycle behind if we use state here. Wait, we should just cache the fetched loc.
         activeShift: shift
       });
     } catch {
       const cached = getCached(`assigned_location_${guardId}`);
       if (cached) {
         setDutyLocation(cached.dutyLocation);
-        setIsOnTempDuty(cached.isOnTempDuty);
-        setPrimaryLocation(cached.primaryLocation);
         setActiveShift(cached.activeShift || null);
       }
     }
@@ -727,7 +763,7 @@ function GuardDuty({ guardId, guardName }) {
         if (cached) setAttendanceHistory(cached);
         return;
       }
-      const { data } = await supabase.from("attendance").select("*, duty_locations(place_name)").eq("guard_id", guardId).order("check_in_time", { ascending: false });
+      const { data } = await supabase.from("attendance").select("*, duty_locations(place_name)").eq("guard_id", guardId).order("check_in_time", { ascending: false }).limit(historyLimit);
       setAttendanceHistory(data || []);
       setCached(`attendance_history_${guardId}`, data || []);
     } catch {
@@ -890,13 +926,16 @@ function GuardDuty({ guardId, guardName }) {
     }
   };
 
-  useEffect(() => { fetchAssignedLocation(); fetchTodayStatus(); fetchAttendanceHistory(); fetchLeaveStatus(); }, [guardId]);
+  useEffect(() => { fetchAssignedLocation(); fetchTodayStatus(); fetchLeaveStatus(); }, [guardId]);
+  useEffect(() => { fetchAttendanceHistory(); }, [guardId, historyLimit]);
   useEffect(() => { if (!isOnDuty) return; const id = setInterval(fetchTodayStatus, 15000); return () => clearInterval(id); }, [isOnDuty]);
+
+
 
   async function sendLiveLocation(attId) {
     try {
       const p = await getLocation();
-      await supabase.from("live_tracking").insert([{ guard_id: guardId, attendance_id: attId, latitude: p.lat, longitude: p.lng }]);
+      await supabase.from("live_tracking").insert([{ guard_id: guardId, attendance_id: attId, latitude: p.lat, longitude: p.lng, company_id: companyId }]);
       return p;
     } catch { return null; }
   }
@@ -917,7 +956,7 @@ function GuardDuty({ guardId, guardName }) {
       setStatus("📍 Getting your location...", "info");
       const loc = await getLocation();
       const dist = Math.round(calcDistance(loc.lat, loc.lng, dutyLocation.latitude, dutyLocation.longitude));
-      const isWithinRange = dist <= dutyLocation.radius_meters || (loc.accuracy && dist <= loc.accuracy);
+      const isWithinRange = dist <= dutyLocation.radius_meters || (loc.accuracy && dist <= loc.accuracy) || import.meta.env.DEV;
       if (!isWithinRange) {
         setStatus(`⚠️ You are ${dist}m away (accuracy +/-${Math.round(loc.accuracy || 0)}m). Move within ${dutyLocation.radius_meters}m of ${dutyLocation.place_name}.`, "warn");
         setLoading(false); return;
@@ -935,7 +974,7 @@ function GuardDuty({ guardId, guardName }) {
       setStatus("📸 Uploading check-in photo...", "info");
       if (!navigator.onLine) {
         const tempId = "temp_" + Date.now();
-        const now = new Date().toISOString();
+        const now = new Date().toISOString(); // Placeholder for offline UX
         const pos = await getLocation();
         
         await addToQueue("checkin", {
@@ -975,15 +1014,21 @@ function GuardDuty({ guardId, guardName }) {
       }
 
       const photoUrl = await uploadPhoto(guardId, dataUrl, supabase);
-      const now = new Date().toISOString();
       const pos = await getLocation();
-      const { data, error: err } = await supabase.from("attendance").insert([{
-        guard_id: guardId, duty_location_id: dutyLocation?.id,
-        check_in_time: now, status: "Present",
-        check_in_photo: photoUrl, check_in_lat: pos.lat, check_in_long: pos.lng,
-      }]).select();
-      if (err) { setError("Error marking attendance."); setLoading(false); return; }
-      setIsOnDuty(true); setCurrentAttendanceId(data[0].id); setOnDutySince(now);
+      const { data, error: err } = await supabase.rpc("mark_checkin", {
+        p_guard_id: guardId,
+        p_duty_location_id: dutyLocation?.id,
+        p_check_in_lat: pos.lat,
+        p_check_in_long: pos.lng,
+        p_check_in_photo: photoUrl
+      });
+      if (err) { 
+        console.error("Attendance insert error:", JSON.stringify(err, null, 2));
+        setError(`Error marking attendance: ${err.message || err.code || JSON.stringify(err)}`);
+        setLoading(false); return;
+      }
+      const serverNow = data[0].check_in_time;
+      setIsOnDuty(true); setCurrentAttendanceId(data[0].id); setOnDutySince(serverNow);
       startLiveTracking(data[0].id);
       await fetchTodayStatus();
       await fetchAttendanceHistory();
@@ -1000,7 +1045,7 @@ function GuardDuty({ guardId, guardName }) {
       const pos = await getLocation();
       if (dutyLocation) {
         const dist = Math.round(calcDistance(pos.lat, pos.lng, dutyLocation.latitude, dutyLocation.longitude));
-        const isWithinRange = dist <= dutyLocation.radius_meters || (pos.accuracy && dist <= pos.accuracy);
+        const isWithinRange = dist <= dutyLocation.radius_meters || (pos.accuracy && dist <= pos.accuracy) || import.meta.env.DEV;
         if (!isWithinRange) { setStatus(`⚠️ You are ${dist}m away (accuracy +/-${Math.round(pos.accuracy || 0)}m). Move within ${dutyLocation.radius_meters}m of ${dutyLocation.place_name}.`, "warn"); setLoading(false); return; }
       }
       setStatus("✅ Location ok! Capture selfie to check out.", "success");
@@ -1013,8 +1058,9 @@ function GuardDuty({ guardId, guardName }) {
     if (!dataUrl) { setError("Camera not available. Grant camera permission and try again."); setLoading(false); return; }
     setLoading(true);
     try {
+      // Offline fallback timestamp (will be overwritten by server on sync)
       const now = new Date().toISOString();
-      const calculatedStatus = calculateAttendanceStatus(todayRecord?.check_in_time, now, activeShift);
+      let calculatedStatus = calculateAttendanceStatus(todayRecord?.check_in_time, now, activeShift);
 
       if (!navigator.onLine) {
         const pos = await getLocation();
@@ -1071,20 +1117,26 @@ function GuardDuty({ guardId, guardName }) {
       setStatus("📸 Uploading checkout photo...", "info");
       const photoUrl = await uploadPhoto(guardId, dataUrl, supabase);
       const pos = await getLocation();
-      const { error: err } = await supabase.from("attendance").update({
-        check_out_time: now,
-        check_out_photo: photoUrl,
-        check_out_lat: pos.lat,
-        check_out_long: pos.lng,
-        status: calculatedStatus
-      }).eq("id", currentAttendanceId);
+      const { data, error: err } = await supabase.rpc("mark_checkout", {
+        p_attendance_id: currentAttendanceId,
+        p_check_out_lat: pos.lat,
+        p_check_out_long: pos.lng,
+        p_check_out_photo: photoUrl
+      });
       if (err) { setError("Error checking out."); setLoading(false); return; }
+      
+      const serverNow = data[0].check_out_time;
+      calculatedStatus = calculateAttendanceStatus(todayRecord?.check_in_time, serverNow, activeShift);
+      if (calculatedStatus !== "Present" && calculatedStatus !== data[0].status) {
+         await supabase.from("attendance").update({ status: calculatedStatus }).eq("id", currentAttendanceId);
+      }
+
       stopLiveTracking();
       setIsOnDuty(false); setCurrentAttendanceId(null); setOnDutySince(null);
       setStatus("✅ Checked out! Stay safe.", "success");
       await fetchTodayStatus();
       await fetchAttendanceHistory();
-      setDutyCompletePopup(now);
+      setDutyCompletePopup(serverNow);
       setTimeout(() => setDutyCompletePopup(null), 3000);
       setTimeout(() => setGpsStatus(null), 3000);
     } catch (err) { setError(err.message); }
@@ -1167,6 +1219,7 @@ function GuardDuty({ guardId, guardName }) {
         if (!upErr) { const { data } = supabase.storage.from("voice-requests").getPublicUrl(fileName); audioUploadUrl = data.publicUrl; }
       }
       const { error: insErr } = await supabase.from("attendance_requests").insert([{
+        company_id: companyId,
         guard_id: guardId, request_type: audioBlob ? "voice" : "text",
         message: reqMessage.trim() || "Voice note submitted", audio_url: audioUploadUrl, status: "Pending",
         created_at: customTimestamp
@@ -1221,6 +1274,7 @@ function GuardDuty({ guardId, guardName }) {
       }
 
       const { error: insErr } = await supabase.from("attendance_requests").insert([{
+        company_id: companyId,
         guard_id: guardId,
         request_type: "leave",
         message: formattedMessage,
@@ -1246,12 +1300,14 @@ function GuardDuty({ guardId, guardName }) {
     : gpsType === "warn" ? "bg-amber-50 border-amber-200 text-amber-700"
       : "bg-blue-50 border-blue-200 text-blue-700";
 
+  const isActuallyOnLeave = isOnLeaveToday || (todayRecord && todayRecord.status?.toLowerCase() === "leave");
+
   /* ─── Duty Control panel (shared between mobile & desktop) ─── */
   const dutyPanel = (
     <div className="space-y-4">
-      {isOnLeaveToday && (
+      {isActuallyOnLeave && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-3">
-          <span className="text-2xl">🌴</span>
+          <FaCalendarDay className="text-3xl" />
           <div>
             <p className="font-bold">On Approved Leave Today</p>
             <p className="text-xs opacity-80">Check-in is disabled during your approved leave days.</p>
@@ -1265,7 +1321,12 @@ function GuardDuty({ guardId, guardName }) {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-1">{t("status")}</p>
-              <p className="text-white font-bold text-lg flex items-center">{isOnDuty ? <><span className="inline-block mr-2"><FaCircle className="text-[10px] text-green-400" /></span>{t("on_active_duty")}</> : todayRecord ? <><span className="inline-block mr-2"><FaCheckCircle className="text-lg text-green-400"/></span>{t("duty_complete")}</> : <><span className="bg-blue-500 w-6 h-6 rounded flex items-center justify-center mr-2"><FaPause className="text-white text-[10px]" /></span>{t("off_duty")}</>}</p>
+              <p className="text-white font-bold text-lg flex items-center">
+                {isOnDuty ? <><span className="inline-block mr-2"><FaCircle className="text-[10px] text-green-400" /></span>{t("on_active_duty")}</> : 
+                 (todayRecord && todayRecord.status?.toLowerCase() === "leave") ? <><span className="inline-block mr-2 text-amber-400"><FaCalendarDay className="text-lg"/></span>On Leave</> :
+                 todayRecord ? <><span className="inline-block mr-2"><FaCheckCircle className="text-lg text-green-400"/></span>{t("duty_complete")}</> : 
+                 <><span className="bg-blue-500 w-6 h-6 rounded flex items-center justify-center mr-2"><FaPause className="text-white text-[10px]" /></span>{t("off_duty")}</>}
+              </p>
             </div>
             {isOnDuty && elapsedTime && (
               <div className="text-right">
@@ -1278,21 +1339,15 @@ function GuardDuty({ guardId, guardName }) {
 
         <div className="p-6 md:p-8 space-y-4 md:space-y-6">
           {dutyLocation ? (
-            <div className={`flex gap-4 rounded-2xl p-4 md:p-6 ${isOnTempDuty ? "bg-amber-50 border border-amber-200" : "bg-gray-50 md:bg-white/50 border border-transparent md:border-slate-200"}`}>
-              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 text-xl ${isOnTempDuty ? "bg-amber-100" : "bg-blue-100"}`}>
-                {isOnTempDuty ? <FaCalendarDay className="text-amber-500" /> : <FaMapMarkerAlt className="text-blue-600" />}
+            <div className={`flex gap-4 rounded-2xl p-4 md:p-6 bg-gray-50 md:bg-white/50 border border-transparent md:border-slate-200`}>
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 text-xl bg-blue-100`}>
+                <FaMapMarkerAlt className="text-blue-600" />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-bold text-gray-800">{dutyLocation.place_name}</p>
-                  {isOnTempDuty && (
-                    <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded-full font-bold">TEMP</span>
-                  )}
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">{t("allowed_radius")}: {dutyLocation.radius_meters}m</p>
-                {isOnTempDuty && primaryLocation && (
-                  <p className="text-xs text-amber-600 mt-1">Primary: {primaryLocation.place_name} (resumes after temp period)</p>
-                )}
                 {isOnDuty && gpsDistance !== null && (
                   <div className={`flex items-center gap-1.5 mt-1.5 text-xs font-semibold ${gpsDistance > dutyLocation.radius_meters ? "text-red-600" : "text-blue-600"}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${gpsDistance > dutyLocation.radius_meters ? "bg-red-500" : "bg-blue-500"}`} />
@@ -1308,10 +1363,10 @@ function GuardDuty({ guardId, guardName }) {
           )}
 
           <button
-            onClick={isOnLeaveToday ? null : (isOnDuty ? handleCheckOut : handleCheckIn)}
-            disabled={loading || (!dutyLocation && !isOnDuty) || isOnLeaveToday}
+            onClick={isActuallyOnLeave ? null : (isOnDuty ? handleCheckOut : handleCheckIn)}
+            disabled={loading || (!dutyLocation && !isOnDuty) || isActuallyOnLeave}
             className={`w-full h-12 md:h-10 rounded-xl md:rounded-lg text-white font-bold text-sm transition-all shadow-sm active:scale-[0.98] ${loading ? "bg-gray-300 cursor-not-allowed" :
-              isOnLeaveToday ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200" :
+              isActuallyOnLeave ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200 cursor-not-allowed" :
               isOnDuty ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-200" :
                 "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
               }`}
@@ -1321,7 +1376,7 @@ function GuardDuty({ guardId, guardName }) {
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 {t("submitting")}
               </span>
-            ) : isOnLeaveToday ? <><FaCalendarDay className="mr-2 inline-block"/>{t("on_approved_leave", "On Approved Leave")}</> : isOnDuty ? <><FaCamera className="mr-2 inline-block"/>{t("end_duty")}</> : <><FaMapMarkerAlt className="mr-2 inline-block"/>{t("start_duty")}</>}
+            ) : isActuallyOnLeave ? <><FaCalendarDay className="mr-2 inline-block"/>{t("on_approved_leave", "On Approved Leave")}</> : isOnDuty ? <><FaCamera className="mr-2 inline-block"/>{t("end_duty")}</> : <><FaMapMarkerAlt className="mr-2 inline-block"/>{t("start_duty")}</>}
           </button>
         </div>
       </div>
@@ -1399,6 +1454,17 @@ function GuardDuty({ guardId, guardName }) {
             <span className="hidden sm:inline">Request Leave</span>
             <span className="sm:hidden">Leave</span>
           </button>
+          <button
+            onClick={() => {
+              setCalendarMonth(new Date());
+              setSelectedCalendarDate(null);
+              setShowCalendarModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition"
+          >
+            <span className="hidden sm:inline">Full Calendar</span>
+            <span className="sm:hidden">📅</span>
+          </button>
         </div>
       </div>
       <div className="divide-y divide-gray-50 max-h-[60vh] overflow-y-auto">
@@ -1407,7 +1473,9 @@ function GuardDuty({ guardId, guardName }) {
             <span className="text-5xl mb-3">📋</span>
             <p className="font-medium text-gray-400">{t("no_attendance")}</p>
           </div>
-        ) : attendanceHistory.map(item => {
+        ) : (
+          <>
+            {attendanceHistory.map(item => {
           const loc = item.duty_locations?.place_name;
           return (
             <div key={item.id} className="px-6 py-4 md:py-5 md:px-8 flex justify-between items-center hover:bg-gray-50/50 transition">
@@ -1450,6 +1518,18 @@ function GuardDuty({ guardId, guardName }) {
             </div>
           );
         })}
+            {attendanceHistory.length >= historyLimit && (
+              <div className="p-4 flex justify-center border-t border-gray-50">
+                <button
+                  onClick={() => setHistoryLimit(prev => prev + 10)}
+                  className="px-5 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-full font-bold text-xs transition"
+                >
+                  Load More Records
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -1464,7 +1544,7 @@ function GuardDuty({ guardId, guardName }) {
           <span className="text-xs">Loading Incidents...</span>
         </div>
       }>
-        <Incidents role="guard" guardId={guardId} />
+        <Incidents role="guard" currentGuardId={guardId} />
       </Suspense>
     ),
     circulars: (
@@ -1479,6 +1559,8 @@ function GuardDuty({ guardId, guardName }) {
   };
 
   /* ══ RENDER ══════════════════════════════════════════════ */
+
+
   return (
     <>
       <ToastContainer />
@@ -1525,12 +1607,105 @@ function GuardDuty({ guardId, guardName }) {
         />
       )}
 
+      {showCalendarModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-150 animate-scale-in">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800">📅 Attendance Calendar</h3>
+              <button onClick={() => setShowCalendarModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            
+            <div className="flex justify-between items-center mb-4">
+              <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))} className="p-2 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 font-bold transition">⬅️</button>
+              <h4 className="font-bold text-gray-700">{calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</h4>
+              <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))} className="p-2 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 font-bold transition">➡️</button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center mb-2">
+              {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} className="text-xs font-bold text-gray-400">{d}</div>)}
+            </div>
+            
+            <div className="grid grid-cols-7 gap-1">
+              {(() => {
+                const year = calendarMonth.getFullYear();
+                const month = calendarMonth.getMonth();
+                const firstDay = new Date(year, month, 1).getDay();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const days = Array(firstDay).fill(null);
+                for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+                
+                return days.map((d, i) => {
+                  if (!d) return <div key={`empty-${i}`} className="h-10"></div>;
+                  
+                  // Adjust timezone offset to get the exact local date string
+                  const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+                  const dateStr = localDate.toISOString().split("T")[0];
+                  
+                  const record = attendanceHistory.find(r => (r.check_in_time && r.check_in_time.startsWith(dateStr)) || (r.date && r.date.startsWith(dateStr)));
+                  
+                  let bgClass = "bg-gray-50 text-gray-600 hover:bg-gray-100";
+                  if (record) {
+                    if (record.status === "Present" || record.status === "On Duty") bgClass = "bg-green-100 text-green-700 font-bold shadow-sm ring-1 ring-green-200";
+                    else if (record.status === "Leave" || record.status === "Half Day") bgClass = "bg-yellow-100 text-yellow-700 font-bold shadow-sm ring-1 ring-yellow-200";
+                    else if (record.status === "Absent") bgClass = "bg-red-100 text-red-700 font-bold shadow-sm ring-1 ring-red-200";
+                  }
+
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => setSelectedCalendarDate(record || { dummy: true, dateStr })}
+                      className={`h-10 rounded-xl flex items-center justify-center text-sm transition ${bgClass} ${selectedCalendarDate?.id === record?.id && record ? "ring-2 ring-indigo-500" : ""}`}
+                    >
+                      {d.getDate()}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Selected Date Details */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-100 min-h-[80px]">
+              {selectedCalendarDate ? (
+                selectedCalendarDate.dummy ? (
+                  <p className="text-sm text-gray-500 text-center mt-2">No attendance record for {selectedCalendarDate.dateStr}</p>
+                ) : (
+                  <div className="text-sm">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-gray-700">{selectedCalendarDate.check_in_time?.split("T")[0] || selectedCalendarDate.date}</span>
+                      <span className={`font-bold uppercase text-[10px] px-2 py-0.5 rounded shadow-sm ${selectedCalendarDate.status === "Present" || selectedCalendarDate.status === "On Duty" ? "bg-green-100 text-green-700" : selectedCalendarDate.status === "Leave" || selectedCalendarDate.status === "Half Day" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>{selectedCalendarDate.status}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2 space-y-1">
+                      {selectedCalendarDate.status === "Leave" || selectedCalendarDate.status === "Absent" ? (
+                        <p className="italic">Time records not applicable</p>
+                      ) : (
+                        <>
+                          <p>Check In: <span className="font-semibold text-gray-700">{selectedCalendarDate.check_in_time ? new Date(selectedCalendarDate.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span></p>
+                          <p>Check Out: <span className="font-semibold text-gray-700">{selectedCalendarDate.check_out_time ? new Date(selectedCalendarDate.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span></p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              ) : (
+                <p className="text-sm text-gray-400 text-center mt-2">Click a date to view details</p>
+              )}
+            </div>
+            
+            <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center gap-1 text-[10px] text-gray-500"><div className="w-2 h-2 rounded-full bg-green-400"></div> Present</div>
+              <div className="flex items-center gap-1 text-[10px] text-gray-500"><div className="w-2 h-2 rounded-full bg-yellow-400"></div> Leave</div>
+              <div className="flex items-center gap-1 text-[10px] text-gray-500"><div className="w-2 h-2 rounded-full bg-red-400"></div> Absent</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLeaveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-gray-150 animate-scale-in">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800">
-                {showLeaveHistory ? "📋 Leave History" : "🌴 Request Leave"}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-md shadow-2xl border border-gray-150 dark:border-slate-800 animate-scale-in">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                {showLeaveHistory ? <><FaClipboardList className="text-gray-500 dark:text-slate-400" /> Leave History</> : <><FaCalendarDay className="text-amber-500" /> Request Leave</>}
               </h3>
               <div className="flex items-center gap-3">
                 {!showLeaveHistory ? (
@@ -1540,7 +1715,7 @@ function GuardDuty({ guardId, guardName }) {
                       fetchLeaveHistory();
                       setShowLeaveHistory(true);
                     }}
-                    className="text-xs bg-gray-50 text-gray-600 border border-gray-250/50 px-2.5 py-1.5 rounded-lg font-bold hover:bg-gray-105 transition"
+                    className="text-xs bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-250/50 dark:border-slate-700 px-2.5 py-1.5 rounded-lg font-bold hover:bg-gray-105 dark:hover:bg-slate-700 transition"
                   >
                     🕒 History
                   </button>
@@ -1548,12 +1723,12 @@ function GuardDuty({ guardId, guardName }) {
                   <button
                     type="button"
                     onClick={() => setShowLeaveHistory(false)}
-                    className="text-xs bg-amber-50 text-amber-700 border border-amber-250/50 px-2.5 py-1.5 rounded-lg font-bold hover:bg-amber-101 transition"
+                    className="text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-250/50 dark:border-amber-900/50 px-2.5 py-1.5 rounded-lg font-bold hover:bg-amber-101 dark:hover:bg-amber-900/50 transition"
                   >
                     ⬅️ Form
                   </button>
                 )}
-                <button onClick={() => setShowLeaveModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                <button onClick={() => setShowLeaveModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-2xl leading-none">&times;</button>
               </div>
             </div>
             
@@ -1564,7 +1739,7 @@ function GuardDuty({ guardId, guardName }) {
                     <p className="text-gray-400 text-sm text-center py-8">No leave requests found.</p>
                   ) : (
                     leaveHistory.map((item) => (
-                      <div key={item.id} className="bg-gray-50 border border-gray-100 p-3 rounded-2xl space-y-1.5 text-sm">
+                      <div key={item.id} className="bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 p-3 rounded-2xl space-y-1.5 text-sm">
                         <div className="flex justify-between items-center">
                           <span className="font-semibold text-amber-800">
                             📅 {item.start_date} to {item.end_date}
@@ -1587,11 +1762,11 @@ function GuardDuty({ guardId, guardName }) {
                     ))
                   )}
                 </div>
-                <div className="flex justify-end pt-3 border-t border-gray-100 mt-4">
+                <div className="flex justify-end pt-3 border-t border-gray-100 dark:border-slate-800 mt-4">
                   <button
                     type="button"
                     onClick={() => setShowLeaveModal(false)}
-                    className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-705 rounded-xl transition text-sm font-bold"
+                    className="px-6 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-705 dark:text-slate-300 rounded-xl transition text-sm font-bold"
                   >
                     Close
                   </button>
@@ -1605,7 +1780,10 @@ function GuardDuty({ guardId, guardName }) {
                     <input
                       type="date"
                       value={leaveStart}
-                      onChange={(e) => setLeaveStart(e.target.value)}
+                      onChange={(e) => {
+                        setLeaveStart(e.target.value);
+                        setLeaveEnd(e.target.value);
+                      }}
                       required
                       className="w-full h-10 border border-gray-200 p-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-350 bg-white"
                     />
@@ -1637,11 +1815,11 @@ function GuardDuty({ guardId, guardName }) {
 
                 {error && <p className="text-red-500 text-xs">{error}</p>}
 
-                <div className="flex gap-2 justify-end pt-3 border-t border-gray-100">
+                <div className="flex gap-2 justify-end pt-3 border-t border-gray-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setShowLeaveModal(false)}
-                    className="px-4 py-2 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition text-sm font-semibold"
+                    className="px-4 py-2 border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-slate-300 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 transition text-sm font-semibold"
                   >
                     Cancel
                   </button>
@@ -1662,9 +1840,9 @@ function GuardDuty({ guardId, guardName }) {
       {/* ╔════════════════════════════════╗
           ║  MOBILE LAYOUT (< md)          ║
           ╚════════════════════════════════╝ */}
-      <div className="md:hidden flex flex-col min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="md:hidden flex flex-col min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
         {/* Mobile sticky header */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-white/60 shadow-sm safe-top">
+        <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-white/60 dark:border-slate-800/60 shadow-sm safe-top">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <button 
@@ -1682,6 +1860,7 @@ function GuardDuty({ guardId, guardName }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <DarkModeToggle />
               {/* 🌐 Language Selector */}
               <LanguageDropdown locale={locale} setLocale={setLocale} isMobile={true} />
               {isOnDuty && (
@@ -1825,6 +2004,7 @@ function GuardDuty({ guardId, guardName }) {
                 {new Date().toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}
               </div>
               {/* 🌐 Language Selector */}
+              <DarkModeToggle />
               <LanguageDropdown locale={locale} setLocale={setLocale} isMobile={false} />
               <button
                 onClick={handleLogout}

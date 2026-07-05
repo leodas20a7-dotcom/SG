@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 import { FaBell } from "react-icons/fa";
 
-function Notifications({ role, guardId, guardName, onNavigate }) {
+function Notifications({ role, guardId, companyId, guardName, onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [emergencyAlert, setEmergencyAlert] = useState(null);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -43,18 +45,26 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
       let query = supabase
         .from("notifications")
         .select("*")
-        .eq("user_role", currentRole)
         .order("created_at", { ascending: false })
         .limit(40);
 
-      if (currentRole === "guard" && guardId) {
+      if (["admin", "super_admin", "supervisor"].includes(currentRole)) {
+        query = query.in("user_role", ["admin", "super_admin", "supervisor"]);
+      } else if (currentRole === "guard" && guardId) {
         // Guards see notifications specifically for them or broadcast notifications
-        query = query.or(`guard_id.eq.${guardId},guard_id.is.null`);
+        query = query.eq("user_role", "guard").or(`guard_id.eq.${guardId},guard_id.is.null`);
+      } else {
+        query = query.eq("user_role", currentRole);
       }
 
       const { data: notificationsData } = await query;
       if (notificationsData) {
         let finalNotifications = notificationsData.filter(isAllowed);
+
+        // Strict company filter for admins
+        if (["admin", "super_admin", "supervisor"].includes(currentRole) && companyId) {
+          finalNotifications = finalNotifications.filter(n => n.company_id === companyId || n.is_broadcast === true);
+        }
 
         if (currentRole === "guard" && guardId) {
           // Fetch circulars this guard is allowed to see to filter out irrelevant circular notifications
@@ -83,7 +93,20 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
         }));
 
         setNotifications(mapped);
-        setUnreadCount(mapped.filter(n => !n.is_read).length);
+        
+        const unreadMapped = mapped.filter(n => !n.is_read);
+        setUnreadCount(unreadMapped.length);
+
+        // Check if there are any unread SOS alerts
+        const unreadSos = unreadMapped.find(n => n.type === "error" && (n.title?.toUpperCase().includes("SOS") || n.title?.toUpperCase().includes("EMERGENCY")));
+        if (unreadSos) {
+          setEmergencyAlert(unreadSos);
+          // Play an alarm sound
+          try {
+            const audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+            audio.play().catch(e => console.log("Audio play blocked by browser:", e));
+          } catch (e) {}
+        }
       }
     };
 
@@ -95,11 +118,26 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
       .channel(`persistent-notifications-${uniqueId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_role=eq.${currentRole}` },
+        { event: "INSERT", schema: "public", table: "notifications" },
         async (payload) => {
           const newNotif = payload.new;
           
           if (!isAllowed(newNotif)) return;
+
+          // Check if notification is meant for this role
+          if (["admin", "super_admin", "supervisor"].includes(currentRole)) {
+            if (!["admin", "super_admin", "supervisor"].includes(newNotif.user_role)) return;
+          } else {
+            if (newNotif.user_role !== currentRole) return;
+          }
+
+          // Filter by company for Admins and Supervisors
+          if (["admin", "super_admin", "supervisor"].includes(currentRole) && companyId) {
+            // Ignore if notification belongs to a different company, AND it's not an explicit broadcast
+            if (newNotif.company_id !== companyId && newNotif.is_broadcast !== true) {
+              return;
+            }
+          }
 
           // Filter guard-specific notifications
           if (currentRole === "guard") {
@@ -129,6 +167,17 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
             ...prev,
           ].slice(0, 20));
           setUnreadCount((prev) => prev + 1);
+
+          // Trigger massive popup for SOS
+          if (newNotif.type === "error" && (newNotif.title?.toUpperCase().includes("SOS") || newNotif.title?.toUpperCase().includes("EMERGENCY"))) {
+            setEmergencyAlert(newNotif);
+            
+            // Play an alarm sound
+            try {
+              const audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+              audio.play().catch(e => console.log("Audio play blocked by browser:", e));
+            } catch (e) {}
+          }
         }
       )
       .subscribe((status, err) => {
@@ -151,9 +200,33 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
       // Update the DB in the background
       const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
       if (unreadIds.length > 0) {
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true }))); // Optimistic update
-        await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
+        await supabase
+          .from("notifications")
+          .update({ is_read: true })
+          .in("id", unreadIds);
+        
+        // Update local state to reflect read status
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       }
+    }
+  };
+
+  const handleAcknowledgeEmergency = async () => {
+    if (emergencyAlert) {
+      // Mark this specific emergency alert as read in the database
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", emergencyAlert.id);
+      
+      setEmergencyAlert(null);
+      
+      // Also update local list state if it's in there
+      setNotifications(prev => prev.map(n => 
+        n.id === emergencyAlert.id ? { ...n, is_read: true } : n
+      ));
+      
+      // We don't want it popping up again on reload!
     }
   };
 
@@ -238,6 +311,7 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
   };
 
   return (
+    <>
     <div className="relative" ref={dropdownRef}>
       {/* Bell Button */}
       <button
@@ -254,8 +328,8 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden transform origin-top-right transition-all">
-          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/80 flex justify-between items-center">
+        <div className="absolute right-0 mt-3 w-80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 dark:border-slate-800 z-50 overflow-hidden transform origin-top-right transition-all">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-800 bg-gray-50/80 dark:bg-slate-800/80 flex justify-between items-center">
             <h3 className="font-bold text-gray-800 text-sm">Notifications</h3>
             {notifications.length > 0 && (
               <button 
@@ -274,12 +348,12 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
                 <p className="text-sm">No new notifications</p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-gray-50 dark:divide-slate-800/50">
                 {notifications.map((notif) => (
                   <div 
                     key={notif.id} 
                     onClick={() => handleNotificationClick(notif)}
-                    className={`p-4 transition flex items-start gap-3 cursor-pointer hover:bg-gray-50 ${notif.is_read ? "bg-white" : "bg-blue-50/50"}`}
+                    className={`p-4 transition flex items-start gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/50 ${notif.is_read ? "bg-white dark:bg-transparent" : "bg-blue-50/50 dark:bg-blue-900/20"}`}
                   >
                     <span className="text-xl shrink-0 mt-0.5">{getIcon(notif.type)}</span>
                     <div>
@@ -293,10 +367,48 @@ function Notifications({ role, guardId, guardName, onNavigate }) {
                 ))}
               </div>
             )}
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* EMERGENCY SOS POPUP MODAL (Rendered outside the DOM tree to prevent clipping) */}
+      {emergencyAlert && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] shadow-2xl max-w-lg w-full p-8 md:p-10 text-center border-[6px] border-[#ff3b30] relative animate-in zoom-in-95 duration-500 ease-out flex flex-col items-center">
+            
+            {/* Top Icon */}
+            <div className="bg-[#fff0f0] w-24 h-24 rounded-3xl flex items-center justify-center shadow-sm mb-6 -mt-16 border border-white">
+              <span className="text-5xl drop-shadow-md">🚨</span>
+            </div>
+            
+            <h2 className="text-2xl md:text-3xl font-black text-gray-800 mb-6 tracking-wide">
+              EMERGENCY SOS ALERT
+            </h2>
+            
+            {/* Message Box */}
+            <div className="bg-[#fff6f6] border border-[#ffe0e0] w-full text-left p-6 rounded-2xl mb-8">
+              <p className="font-medium text-slate-600 text-[15px] leading-relaxed">
+                {emergencyAlert.message}
+              </p>
+              <div className="mt-5 flex items-center">
+                <p className="text-[#ff3b30] text-xs font-bold uppercase tracking-wider">
+                  RECEIVED: {emergencyAlert.time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleAcknowledgeEmergency}
+              className="w-full bg-[#f8312f] hover:bg-[#d62828] text-white font-bold text-[17px] py-4 rounded-2xl shadow-[0_8px_20px_-6px_rgba(248,49,47,0.6)] transition-all active:scale-[0.98]"
+            >
+              Acknowledge Alert
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 

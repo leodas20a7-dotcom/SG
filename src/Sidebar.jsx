@@ -11,24 +11,38 @@ import {
   FaChevronUp,
   FaChevronLeft,
   FaChevronRight,
+  FaCreditCard,
+  FaCalendarAlt,
+  FaBuilding,
+  FaBullhorn,
 } from "react-icons/fa";
 import { useLanguage } from "./LanguageContext";
 
-const ALL_NAV = [
-  { key: "dashboard", label: "Dashboard", icon: FaChartBar, roles: ["admin", "supervisor", "guard"] },
-  { key: "live-ops", label: "Live Tracking", icon: FaGlobeAsia, roles: ["admin", "supervisor"] },
-  { key: "staff-registry", label: "Staff Registry", icon: FaUserShield, roles: ["admin"] },
-  { key: "guard-profiles", label: "Guard Profiles", icon: FaClipboardCheck, roles: ["admin", "supervisor"] },
-  { key: "system-users", label: "System Access", icon: FaUserShield, roles: ["admin"] },
-  { key: "incidents", label: "Incidents", icon: FaExclamationTriangle, roles: ["admin", "supervisor", "guard"] },
-  { key: "circulars", label: "Circulars", icon: FaFileAlt, roles: ["admin", "supervisor", "guard"] },
-  { key: "correction-requests", label: "Requests", icon: FaClipboardCheck, roles: ["admin", "supervisor"] },
-  { key: "settings", label: "Settings", icon: FaCog, roles: ["admin"] },
+export const ALL_NAV = [
+  { key: "dashboard", label: "Dashboard", icon: FaChartBar, roles: ["platform_admin", "super_admin", "admin", "supervisor", "guard"] },
+  { key: "tenant-management", label: "Tenants", icon: FaBuilding, roles: ["platform_admin"] },
+  { key: "global-broadcasts", label: "Broadcasts", icon: FaBullhorn, roles: ["platform_admin"] },
+  { key: "live-ops", label: "Live Tracking", icon: FaGlobeAsia, roles: ["super_admin", "admin", "supervisor"] },
+  { key: "staff-registry", label: "Staff Registry", icon: FaUserShield, roles: ["super_admin", "admin"] },
+  { key: "guard-profiles", label: "Guard Profiles", icon: FaClipboardCheck, roles: ["super_admin", "admin", "supervisor"] },
+  { key: "shifts", label: "Assignments", icon: FaCalendarAlt, roles: ["super_admin", "admin", "supervisor"] },
+  { key: "system-users", label: "System Access", icon: FaUserShield, roles: ["super_admin", "admin"] },
+  { key: "incidents", label: "Incidents", icon: FaExclamationTriangle, roles: ["super_admin", "admin", "supervisor", "guard"] },
+  { key: "circulars", label: "Circulars", icon: FaFileAlt, roles: ["super_admin", "admin", "supervisor", "guard"] },
+  { key: "correction-requests", label: "Requests", icon: FaClipboardCheck, roles: ["super_admin", "admin", "supervisor"] },
+  { key: "billing", label: "Billing", icon: FaCreditCard, roles: ["super_admin", "admin"] },
+  { key: "settings", label: "Settings", icon: FaCog, roles: ["platform_admin", "super_admin", "admin"] },
 ];
 
-function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
+function Sidebar({ role, page, onNavigate, isOpen, onClose, allowedPages }) {
   const { t } = useLanguage();
-  const navItems = ALL_NAV.filter((item) => item.roles.includes(role));
+  const navItems = ALL_NAV.filter((item) => {
+    if (!item.roles.includes(role)) return false;
+    if (allowedPages && allowedPages.length > 0) {
+      return allowedPages.includes(item.key);
+    }
+    return true;
+  });
 
   const appLogo = "/logo.png";
   
@@ -139,30 +153,28 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
       />
 
       {/* Mobile Drawer */}
-      <div className={`md:hidden fixed inset-y-0 left-0 w-72 z-[80] transform transition-transform duration-300 ease-in-out flex flex-col`}
+      <div className={`md:hidden fixed inset-y-0 left-0 w-72 z-[80] transform transition-transform duration-300 ease-in-out flex flex-col bg-gradient-to-br from-[#f0f4ff] to-white dark:from-slate-900 dark:to-slate-800 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.3)]`}
         style={{
-          background: "linear-gradient(160deg, #f0f4ff 0%, #ffffff 100%)",
-          boxShadow: "4px 0 24px rgba(0,0,0,0.12)",
           transform: isOpen ? "translateX(0)" : "translateX(-100%)",
         }}
       >
         <div className="p-5 flex-1 flex flex-col overflow-y-auto">
           {/* Drawer Header */}
-          <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
+          <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100 dark:border-slate-800">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white shadow-sm shrink-0">
+              <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm shrink-0">
                 <img src={appLogo} alt="SecureSys Logo" className="w-full h-full object-cover" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-gray-800">SecureSys</h1>
+                <h1 className="text-base font-bold text-gray-800 dark:text-white">SecureSys</h1>
                 {role && (
-                  <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 font-medium capitalize">{role}</span>
+                  <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium capitalize">{role}</span>
                 )}
               </div>
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-full transition"
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-white rounded-full transition"
             >
               ✕
             </button>
@@ -181,10 +193,10 @@ function Sidebar({ role, page, onNavigate, isOpen, onClose }) {
                   }}
                   className={`cursor-pointer px-4.5 py-3.5 rounded-xl transition-all duration-300 flex items-center gap-3.5 ${isActive
                       ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 font-bold"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-semibold"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50 font-semibold"
                     }`}
                 >
-                  <Icon className={`text-lg transition-transform duration-350 ${isActive ? "text-white scale-110" : "text-blue-500"}`} />
+                  <Icon className={`text-lg transition-transform duration-350 ${isActive ? "text-white scale-110" : "text-blue-500 dark:text-blue-400"}`} />
                   <span className="text-sm tracking-wide">{t(item.key)}</span>
                 </li>
               );

@@ -33,6 +33,11 @@ export function getLocation() {
         await new Promise((r) => setTimeout(r, 1000));
         pos = await getCoordinates(options);
       }
+      if (Date.now() - pos.timestamp > 300000) {
+        reject(new Error("GPS data is stale (> 5 minutes old). Please refresh your location or restart your browser."));
+        return;
+      }
+
       resolve({
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,

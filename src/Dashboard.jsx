@@ -633,8 +633,8 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
 
           {/* Top Bar Header with Premium Glassmorphism */}
           <div className="glass-header rounded-2xl p-4 md:p-5 mb-8 relative z-40 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
-            <div className="flex justify-between items-center gap-3">
-              <div className="flex items-center gap-3">
+            <div className="flex justify-between items-center gap-2 md:gap-3">
+              <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
                 {/* Mobile hamburger - inside the card, aligned with title */}
                 <button
                   onClick={() => setSidebarOpen(true)}
@@ -644,15 +644,15 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                   </svg>
                 </button>
-                <div>
-                  <h1 className="text-xl md:text-2xl.5 font-extrabold text-slate-800 tracking-tight capitalize leading-tight">{t(page)}</h1>
-                  <p className="text-[11px] md:text-sm text-slate-450 mt-0.5 font-medium">
+                <div className="min-w-0">
+                  <h1 className="text-xl md:text-2xl font-extrabold text-slate-800 tracking-tight capitalize leading-tight truncate">{t(page)}</h1>
+                  <p className="text-[11px] md:text-sm text-slate-450 mt-0.5 font-medium truncate">
                     {companyName && <span className="font-bold text-slate-600">{companyName} • </span>}
                     {t("logged_in_as")}: <span className="font-semibold capitalize text-indigo-650">{role || "user"}</span>
                   </p>
                 </div>
               </div>
-              <div className="flex items-center shrink-0 gap-2.5 md:gap-3">
+              <div className="flex items-center shrink-0 gap-1.5 sm:gap-2.5 md:gap-3">
                 <DarkModeToggle />
                 <LanguageDropdown locale={locale} setLocale={setLocale} />
                 <Notifications role={role} companyId={companyId} onNavigate={onNavigate} />

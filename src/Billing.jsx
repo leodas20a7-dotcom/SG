@@ -76,7 +76,7 @@ function Billing({ companyId }) {
     setIsProcessing(true);
     try {
       const { data: comp } = await supabase.from("companies").select("purchased_seats, current_period_end, name").eq("id", companyId).single();
-      const currentSeats = comp?.purchased_seats > 0 ? comp.purchased_seats : 1;
+      const currentSeats = comp?.purchased_seats || 0;
       
       const savedAdditionalSeats = localStorage.getItem('pending_additional_seats');
       const extraSeats = savedAdditionalSeats ? parseInt(savedAdditionalSeats) : 0;
@@ -151,13 +151,13 @@ function Billing({ companyId }) {
     setIsProcessing(true);
     try {
       // actionType is "add_seats", "update_card", or "pay_due_bill"
-      let requestedSeatsForBackend = company?.purchased_seats || 1;
+      let requestedSeatsForBackend = company?.purchased_seats || 0;
       let amountToCharge = 0;
       
       localStorage.removeItem('pending_renewal'); // Reset
       
       if (actionType === "add_seats") {
-        requestedSeatsForBackend = (company?.purchased_seats || 1) + additionalSeats;
+        requestedSeatsForBackend = (company?.purchased_seats || 0) + additionalSeats;
         localStorage.setItem('pending_additional_seats', additionalSeats.toString());
         amountToCharge = explicitAmountToCharge ?? proratedCharge;
       } else if (actionType === "pay_due_bill") {
@@ -209,7 +209,7 @@ function Billing({ companyId }) {
 
   const statusColor = statusColors[company?.subscription_status] || "bg-gray-100 text-gray-700 border-gray-200";
   
-  const currentSeats = company?.purchased_seats || 1;
+  const currentSeats = company?.purchased_seats || 0;
   const currentMonthlyBill = currentSeats * PRICE_PER_GUARD;
   const newTotalMonthlyBill = (currentSeats + additionalSeats) * PRICE_PER_GUARD;
 

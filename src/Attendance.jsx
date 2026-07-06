@@ -918,6 +918,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
       )}
 
       <div className="mt-2">
+        {!hideHistory && (
           <div className="space-y-4 mt-6">
             <div className="glass-card rounded-2xl overflow-visible shadow-sm ring-1 ring-gray-200 bg-white">
               <div className="px-6 py-5 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/30 rounded-t-2xl">

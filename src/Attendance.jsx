@@ -669,7 +669,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
       {showCalendarModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 perspective" style={{ perspective: '1200px' }}>
           <div 
-            className={`relative max-w-sm w-full h-[550px] transition-transform duration-700 animate-scale-in`} 
+            className={`relative max-w-sm w-full h-[580px] transition-transform duration-700 animate-scale-in`} 
             style={{ transformStyle: 'preserve-3d', transform: isCalendarFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
           >
             {/* FRONT FACE: Calendar */}
@@ -717,7 +717,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                 for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
                 
                 return days.map((d, i) => {
-                  if (!d) return <div key={`empty-${i}`} className="h-10"></div>;
+                  if (!d) return <div key={`empty-${i}`} className="h-9"></div>;
                   
                   const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
                   const dateStr = localDate.toISOString().split("T")[0];
@@ -738,7 +738,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                     <button
                       key={dateStr}
                       onClick={() => setSelectedCalendarDate(record || { dummy: true, dateStr })}
-                      className={`h-10 rounded-xl flex items-center justify-center text-sm transition ${bgClass} ${selectedCalendarDate?.id === record?.id && record ? "ring-2 ring-indigo-500" : ""}`}
+                      className={`h-9 rounded-xl flex items-center justify-center text-sm transition ${bgClass} ${selectedCalendarDate?.id === record?.id && record ? "ring-2 ring-indigo-500" : ""}`}
                     >
                       {d.getDate()}
                     </button>
@@ -753,8 +753,8 @@ function Attendance({ role, userGuardId, hideHistory }) {
                 const sel = typeof selectedCalendarDate === 'object' && !selectedCalendarDate.dummy ? selectedCalendarDate : records.find(r => String(r.guard_id) === String(calendarGuardId) && (r.check_in_time?.startsWith(dateKey) || r.date === dateKey));
                 if (!sel) return <p className="text-sm text-gray-500 italic">No records for {dateKey}</p>;
                 return (
-                  <div className="bg-gray-50 p-4 rounded-2xl">
-                    <div className="flex justify-between items-center mb-2">
+                  <div className="bg-gray-50 p-3 rounded-2xl">
+                    <div className="flex justify-between items-center mb-1.5">
                       <span className="font-bold text-gray-800">{dateKey}</span>
                       <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${sel.status === 'Present' || sel.status === 'On Duty' ? 'bg-green-200 text-green-800' : sel.status === 'Leave' || sel.status === 'Half Day' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'}`}>
                         {sel.status}

@@ -749,7 +749,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
             
             <div className="mt-4 pt-4 border-t border-gray-100">
               {selectedCalendarDate ? (() => {
-                const dateKey = selectedCalendarDate.dateStr || selectedCalendarDate;
+                const dateKey = selectedCalendarDate.dateStr || (selectedCalendarDate.check_in_time ? selectedCalendarDate.check_in_time.split("T")[0] : selectedCalendarDate.date);
                 const sel = typeof selectedCalendarDate === 'object' && !selectedCalendarDate.dummy ? selectedCalendarDate : records.find(r => String(r.guard_id) === String(calendarGuardId) && (r.check_in_time?.startsWith(dateKey) || r.date === dateKey));
                 if (!sel) return <p className="text-sm text-gray-500 italic">No records for {dateKey}</p>;
                 return (

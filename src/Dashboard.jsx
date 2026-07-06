@@ -507,9 +507,9 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
 
     const cleanupOldPhotos = async () => {
       try {
-        const oneMinuteAgo = new Date();
-        oneMinuteAgo.setMinutes(oneMinuteAgo.getMinutes() - 1);
-        const isoString = oneMinuteAgo.toISOString();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const isoString = thirtyDaysAgo.toISOString();
 
         // 1. Fetch old attendance records with photos
         const { data: oldRecords, error: fetchErr } = await supabase

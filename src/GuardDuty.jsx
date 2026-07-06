@@ -134,7 +134,7 @@ const TABS = [
   { key: "incidents", label: "Incidents", mobileLabel: "Issues", icon: <FaBell />, desc: "Report Incidents" },
   { key: "circulars", label: "Circulars", mobileLabel: "News", icon: <FaBullhorn />, desc: "Announcements" },
 ];/* ─── Circular feed (read-only) ─── */
-function CircularFeed({ guardId, guardName }) {
+function CircularFeed({ guardId, guardName, companyId }) {
   const [items, setItems] = useState([]);
   useEffect(() => {
     if (!navigator.onLine) {
@@ -143,6 +143,9 @@ function CircularFeed({ guardId, guardName }) {
       return;
     }
     let query = supabase.from("circulars").select("*").order("created_at", { ascending: false });
+    if (companyId) {
+      query = query.eq("company_id", companyId);
+    }
     if (guardId) {
       query = query.or(`is_broadcast.eq.true,guard_id.eq.${guardId}`);
     } else {
@@ -930,14 +933,29 @@ function GuardDuty({ guardId, guardName, companyId }) {
   useEffect(() => { fetchAttendanceHistory(); }, [guardId, historyLimit]);
   useEffect(() => { if (!isOnDuty) return; const id = setInterval(fetchTodayStatus, 15000); return () => clearInterval(id); }, [isOnDuty]);
 
+  // Restart auto-ping if guard refreshes the page while on duty
+  useEffect(() => {
+    if (isOnDuty && currentAttendanceId) {
+      if (!trackingRef.current) {
+        startLiveTracking(currentAttendanceId);
+      }
+    } else {
+      stopLiveTracking();
+    }
+  }, [isOnDuty, currentAttendanceId]);
+
 
 
   async function sendLiveLocation(attId) {
     try {
       const p = await getLocation();
-      await supabase.from("live_tracking").insert([{ guard_id: guardId, attendance_id: attId, latitude: p.lat, longitude: p.lng, company_id: companyId }]);
+      const { error } = await supabase.from("live_tracking").insert([{ guard_id: guardId, attendance_id: attId, latitude: p.lat, longitude: p.lng, company_id: companyId }]);
+      if (error) throw error;
       return p;
-    } catch { return null; }
+    } catch (err) { 
+      console.error("Auto Ping Exception:", err);
+      return null; 
+    }
   }
   function startLiveTracking(attId) { sendLiveLocation(attId); trackingRef.current = setInterval(() => sendLiveLocation(attId), 300000); }
   function stopLiveTracking() { if (trackingRef.current) { clearInterval(trackingRef.current); trackingRef.current = null; } }
@@ -1150,7 +1168,7 @@ function GuardDuty({ guardId, guardName, companyId }) {
     if (pos) {
       setStatus("✅ Location sent!", "success");
       if (dutyLocation) setGpsDistance(Math.round(calcDistance(pos.lat, pos.lng, dutyLocation.latitude, dutyLocation.longitude)));
-    } else setStatus("❌ Could not get GPS.", "warn");
+    } else setStatus("❌ Failed to save location.", "warn");
     setTimeout(() => setGpsStatus(null), 3000);
   }
 
@@ -1544,7 +1562,7 @@ function GuardDuty({ guardId, guardName, companyId }) {
           <span className="text-xs">Loading Incidents...</span>
         </div>
       }>
-        <Incidents role="guard" currentGuardId={guardId} />
+        <Incidents role="guard" currentGuardId={guardId} companyId={companyId} />
       </Suspense>
     ),
     circulars: (
@@ -1553,7 +1571,7 @@ function GuardDuty({ guardId, guardName, companyId }) {
           <h2 className="font-bold text-gray-800 text-lg">{t("official_announcements")}</h2>
           <p className="text-xs text-gray-400 mt-0.5">{t("circulars_desc")}</p>
         </div>
-        <CircularFeed guardId={guardId} guardName={guardName} />
+        <CircularFeed guardId={guardId} guardName={guardName} companyId={companyId} />
       </div>
     ),
   };

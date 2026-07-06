@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/sambanova/:match*",
+      "destination": "https://api.sambanova.ai/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

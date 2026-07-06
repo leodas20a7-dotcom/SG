@@ -147,6 +147,13 @@ function Billing({ companyId }) {
   };
 
   const handleManageBilling = async (actionType, explicitAmountToCharge) => {
+    if (actionType === "pay_due_bill" && (company?.purchased_seats || 0) === 0) {
+      setShowActionModal(false);
+      showToast("You currently have 0 seats. Please purchase at least 1 seat to start your subscription.", "error");
+      setAdditionalSeats(1);
+      return;
+    }
+
     setShowActionModal(false);
     setIsProcessing(true);
     try {
@@ -186,7 +193,10 @@ function Billing({ companyId }) {
 
     } catch (error) {
       console.error(error);
-      const errorMessage = error.message || error.context?.error || "Failed to connect to billing server.";
+      let errorMessage = error.message || error.context?.error || "Failed to connect to billing server.";
+      if (errorMessage.includes("V6011")) {
+        errorMessage = "Payment amount cannot be $0. Please ensure you are making a valid purchase.";
+      }
       showToast(errorMessage, "error");
       setIsProcessing(false);
     }
@@ -353,7 +363,12 @@ function Billing({ companyId }) {
             <button
               id="tour-billing-manage"
               onClick={() => setShowActionModal(true)}
-              className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+              disabled={currentSeats === 0}
+              className={`w-full sm:w-auto px-6 py-3 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+                currentSeats === 0
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/30"
+              }`}
             >
               <FaCreditCard />
               {company?.subscription_status === 'past_due' ? "Pay Past Due Bill" : "Manage Billing & Cards"}

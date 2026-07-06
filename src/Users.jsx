@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import CustomSelect from "./CustomSelect";
 
-function Users() {
+function Users({ companyId }) {
   const [users, setUsers] = useState([]);
   const [guards, setGuards] = useState([]);
   const [fullName, setFullName] = useState("");
@@ -17,14 +17,18 @@ function Users() {
 
   async function fetchUsers() {
     try {
-      const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      let query = supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      if (companyId) query = query.eq("company_id", companyId);
+      const { data } = await query;
       setUsers(data || []);
     } catch { showToast("Could not load users.", "error"); }
   }
 
   async function fetchGuards() {
     try {
-      const { data } = await supabase.from("guards").select("*").order("name");
+      let query = supabase.from("guards").select("*").order("name");
+      if (companyId) query = query.eq("company_id", companyId);
+      const { data } = await query;
       setGuards(data || []);
     } catch { /* ignore */ }
   }

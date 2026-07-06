@@ -250,6 +250,17 @@ function Attendance({ role, userGuardId, hideHistory }) {
     }
   }, [records, guardId]);
 
+  // Restart auto-ping if tracking should be active but isn't
+  useEffect(() => {
+    if (isOnDuty && currentAttendanceId) {
+      if (!trackingRef.current) {
+        startLiveTracking(currentAttendanceId);
+      }
+    } else {
+      stopLiveTracking();
+    }
+  }, [isOnDuty, currentAttendanceId, guards]);
+
   function clearError(field) { setErrors((p) => ({ ...p, [field]: "" })); }
 
   function validate() {
@@ -262,14 +273,22 @@ function Attendance({ role, userGuardId, hideHistory }) {
   async function startLiveTracking(attId) {
     const sendLocation = async () => {
       try {
+        const currentGuard = guards.find(g => String(g.id) === String(guardId));
+        const companyId = currentGuard?.company_id;
+        if (!companyId) return;
+
         const pos = await getLocation();
-        await supabase.from("live_tracking").insert([{
+        const { error } = await supabase.from("live_tracking").insert([{
           guard_id: guardId,
           attendance_id: attId,
           latitude: pos.lat,
           longitude: pos.lng,
+          company_id: companyId
         }]);
-      } catch { /* silently continue */ }
+        if (error) throw error;
+      } catch (err) { 
+        console.error("Attendance Live Tracking Error:", err);
+      }
     };
     await sendLocation();
     trackingRef.current = setInterval(sendLocation, 300000);

@@ -78,8 +78,8 @@ function MapView({ companyId }) {
       let qLT = supabase
         .from("live_tracking")
         .select("*")
-        .gte("tracked_at", today + "T00:00:00")
-        .order("tracked_at", { ascending: false });
+        .gte("recorded_at", today + "T00:00:00")
+        .order("recorded_at", { ascending: false });
       if (companyId) qLT = qLT.eq("company_id", companyId);
       const { data: tracking } = await qLT;
 
@@ -101,7 +101,7 @@ function MapView({ companyId }) {
             id: gid,
             lat: track ? track.latitude : att.duty_locations?.latitude,
             lng: track ? track.longitude : att.duty_locations?.longitude,
-            time: track ? track.tracked_at : att.check_in_time,
+            time: track ? track.recorded_at : att.check_in_time,
             guardName: att.guards?.name || "Unknown",
             locationName: att.duty_locations?.place_name || null
           };
@@ -116,7 +116,7 @@ function MapView({ companyId }) {
       let qTrail = supabase
         .from("live_tracking")
         .select("latitude, longitude")
-        .gte("tracked_at", today + "T00:00:00");
+        .gte("recorded_at", today + "T00:00:00");
       if (companyId) qTrail = qTrail.eq("company_id", companyId);
       const { data: trailPoints } = await qTrail;
       setPatrolTrailPoints(trailPoints || []);
@@ -389,6 +389,11 @@ function MapView({ companyId }) {
                                 <p className="text-[10px] text-indigo-650 font-semibold mt-0.5">📍 {guard.locationName}</p>
                               ) : (
                                 <p className="text-[10px] text-slate-400 mt-0.5">Offline</p>
+                              )}
+                              {guard.time && (
+                                <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                                  📡 Auto Ping: {new Date(guard.time).toLocaleTimeString()}
+                                </p>
                               )}
                             </div>
                           </div>

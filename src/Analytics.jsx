@@ -161,11 +161,7 @@ function Analytics({ role, onNavigate, companyId }) {
       const patInProgress = finalActiveCount;
       const patPending = Math.max(0, finalGuardsCount - patCompleted - patInProgress);
 
-      if (patCompleted === 0 && patInProgress === 0) {
-        setPatrolStatus({ completed: 3, inProgress: 1, pending: 0 });
-      } else {
-        setPatrolStatus({ completed: patCompleted, inProgress: patInProgress, pending: patPending });
-      }
+      setPatrolStatus({ completed: patCompleted, inProgress: patInProgress, pending: patPending });
 
       // --- 2. Fetch Shift Overview ---
       let qShiftsList = supabase.from("shifts").select("shift_name");
@@ -186,11 +182,9 @@ function Analytics({ role, onNavigate, companyId }) {
           else if (name.includes("night")) night++;
           else morning++; // default fallback for other names
         });
-        offDuty = Math.max(0, finalGuardsCount - (morning + afternoon + night));
-        setShiftOverview({ morning, afternoon, night, offDuty });
-      } else {
-        setShiftOverview({ morning: 2, afternoon: 1, night: 1, offDuty: 0 });
       }
+      offDuty = Math.max(0, finalGuardsCount - (morning + afternoon + night));
+      setShiftOverview({ morning, afternoon, night, offDuty });
 
       // --- 3. Fetch Recent Activity ---
       const activityList = [];
@@ -499,9 +493,9 @@ function Analytics({ role, onNavigate, companyId }) {
         .from("live_tracking")
         .select("*")
         .eq("guard_id", selectedPatrolGuard)
-        .gte("tracked_at", selectedPatrolDate + "T00:00:00")
-        .lte("tracked_at", selectedPatrolDate + "T23:59:59")
-        .order("tracked_at", { ascending: true });
+        .gte("recorded_at", selectedPatrolDate + "T00:00:00")
+        .lte("recorded_at", selectedPatrolDate + "T23:59:59")
+        .order("recorded_at", { ascending: true });
 
       if (["admin", "super_admin", "supervisor"].includes(role) && companyId) {
         qLT = qLT.eq("company_id", companyId);
@@ -523,8 +517,8 @@ function Analytics({ role, onNavigate, companyId }) {
         const coords = data.map(item => ({
           lat: item.latitude,
           lng: item.longitude,
-          time: new Date(item.tracked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          date: new Date(item.tracked_at).toLocaleDateString()
+          time: new Date(item.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(item.recorded_at).toLocaleDateString()
         }));
         setPatrolCoords(coords);
         setMapCenter([coords[0].lat, coords[0].lng]);
@@ -1090,7 +1084,7 @@ function Analytics({ role, onNavigate, companyId }) {
                     <p className="text-[9px] text-slate-400 font-semibold">
                       {(() => {
                         const total = shiftOverview.morning + shiftOverview.afternoon + shiftOverview.night + shiftOverview.offDuty;
-                        return total > 0 ? Math.round((shiftOverview.morning / total) * 100) : 50;
+                        return total > 0 ? Math.round((shiftOverview.morning / total) * 100) : 0;
                       })()}%
                     </p>
                     <div className="w-full bg-slate-100 h-1 rounded-full mt-2 overflow-hidden">
@@ -1099,7 +1093,7 @@ function Analytics({ role, onNavigate, companyId }) {
                         style={{ 
                           width: `${(() => {
                             const total = shiftOverview.morning + shiftOverview.afternoon + shiftOverview.night + shiftOverview.offDuty;
-                            return total > 0 ? Math.round((shiftOverview.morning / total) * 100) : 50;
+                            return total > 0 ? Math.round((shiftOverview.morning / total) * 100) : 0;
                           })()}%` 
                         }} 
                       />
@@ -1112,7 +1106,7 @@ function Analytics({ role, onNavigate, companyId }) {
                     <p className="text-[9px] text-slate-400 font-semibold">
                       {(() => {
                         const total = shiftOverview.morning + shiftOverview.afternoon + shiftOverview.night + shiftOverview.offDuty;
-                        return total > 0 ? Math.round((shiftOverview.afternoon / total) * 100) : 25;
+                        return total > 0 ? Math.round((shiftOverview.afternoon / total) * 100) : 0;
                       })()}%
                     </p>
                     <div className="w-full bg-slate-100 h-1 rounded-full mt-2 overflow-hidden">
@@ -1121,7 +1115,7 @@ function Analytics({ role, onNavigate, companyId }) {
                         style={{ 
                           width: `${(() => {
                             const total = shiftOverview.morning + shiftOverview.afternoon + shiftOverview.night + shiftOverview.offDuty;
-                            return total > 0 ? Math.round((shiftOverview.afternoon / total) * 100) : 25;
+                            return total > 0 ? Math.round((shiftOverview.afternoon / total) * 100) : 0;
                           })()}%` 
                         }} 
                       />
@@ -1134,7 +1128,7 @@ function Analytics({ role, onNavigate, companyId }) {
                     <p className="text-[9px] text-slate-400 font-semibold">
                       {(() => {
                         const total = shiftOverview.morning + shiftOverview.afternoon + shiftOverview.night + shiftOverview.offDuty;
-                        return total > 0 ? Math.round((shiftOverview.night / total) * 100) : 25;
+                        return total > 0 ? Math.round((shiftOverview.night / total) * 100) : 0;
                       })()}%
                     </p>
                     <div className="w-full bg-slate-100 h-1 rounded-full mt-2 overflow-hidden">
@@ -1143,7 +1137,7 @@ function Analytics({ role, onNavigate, companyId }) {
                         style={{ 
                           width: `${(() => {
                             const total = shiftOverview.morning + shiftOverview.afternoon + shiftOverview.night + shiftOverview.offDuty;
-                            return total > 0 ? Math.round((shiftOverview.night / total) * 100) : 25;
+                            return total > 0 ? Math.round((shiftOverview.night / total) * 100) : 0;
                           })()}%` 
                         }} 
                       />

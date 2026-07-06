@@ -299,7 +299,8 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
           }));
 
           if (overridePayloads.length > 0) {
-            await supabase.from("shifts").insert(overridePayloads);
+            const { error: insErr } = await supabase.from("shifts").insert(overridePayloads);
+            if (insErr) throw insErr;
           }
         }
       }
@@ -579,9 +580,24 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
   /* ── update guard ── */
   async function updateGuard() {
     if (!validate()) return;
-    setLoading(true);
+    
     try {
       const { data: currentGuard } = await supabase.from("guards").select("*").eq("id", editingId).single();
+      
+      // Enforce billing limits if activating an inactive guard
+      if (status === "Active" && currentGuard?.status !== "Active") {
+        if (companyStatus === "past_due") {
+          showToast("Payment is past due. Please update billing to activate guards.", "error");
+          return;
+        }
+        const activeGuardsCount = guards.filter(g => g.status === "Active").length;
+        if (activeGuardsCount >= purchasedSeats) {
+          setShowLimitPopup(true);
+          return;
+        }
+      }
+
+      setLoading(true);
       let authUserId = currentGuard?.auth_user_id;
 
       // Create auth account if credentials added for first time
@@ -591,7 +607,8 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
         const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
         if (!authErr && authData.user) {
           authUserId = authData.user.id;
-          await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard", company_id: companyId }]);
+          const { error: profErr } = await supabase.from("profiles").insert([{ id: authUserId, full_name: name.trim(), email: email.trim(), role: "guard", company_id: companyId }]);
+          if (profErr) { showToast("Failed to create user profile.", "error"); }
         }
         if (saved) {
           const { error: sessionErr } = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });

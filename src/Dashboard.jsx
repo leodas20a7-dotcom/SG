@@ -645,8 +645,16 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
                   </svg>
                 </button>
                 <div className="min-w-0">
-                  <h1 className="text-xl md:text-2xl font-extrabold text-slate-800 tracking-tight capitalize leading-tight truncate">{t(page)}</h1>
-                  <p className="text-[11px] md:text-sm text-slate-450 mt-0.5 font-medium truncate">
+                  <h1 
+                    className="text-xl md:text-2xl font-extrabold text-slate-800 tracking-tight capitalize leading-tight truncate cursor-pointer"
+                    title={t(page)}
+                  >
+                    {t(page)}
+                  </h1>
+                  <p 
+                    className="text-[11px] md:text-sm text-slate-450 mt-0.5 font-medium truncate cursor-pointer"
+                    title={`${companyName ? companyName + " • " : ""}${t("logged_in_as")}: ${role || "user"}`}
+                  >
                     {companyName && <span className="font-bold text-slate-600">{companyName} • </span>}
                     {t("logged_in_as")}: <span className="font-semibold capitalize text-indigo-650">{role || "user"}</span>
                   </p>

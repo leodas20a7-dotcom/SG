@@ -43,6 +43,22 @@ function Attendance({ role, userGuardId, hideHistory }) {
   // Confirm Modal state
   const [confirmConfig, setConfirmConfig] = useState(null);
 
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    guard_id: "",
+    duty_location_id: "",
+    check_in_time: "",
+    check_out_time: "",
+    status: "Present"
+  });
+
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  const [calendarGuardId, setCalendarGuardId] = useState("");
+  const [isCalendarFlipped, setIsCalendarFlipped] = useState(false);
+
   const { showToast, ToastContainer } = useToast();
 
   const isAbsent = status === "Absent";
@@ -227,6 +243,62 @@ function Attendance({ role, userGuardId, hideHistory }) {
     const today = new Date().toISOString().split("T")[0];
     return records.some((r) => String(r.guard_id) === String(gId) && (r.check_in_time?.startsWith(today) || r.check_out_time?.startsWith(today)) && r.check_out_time);
   }
+
+  function openEditModal(record = null) {
+    if (record) {
+      setEditingRecord(record);
+      setEditFormData({
+        guard_id: record.guard_id || "",
+        duty_location_id: record.duty_location_id || "",
+        check_in_time: record.check_in_time ? record.check_in_time.slice(0, 16) : "",
+        check_out_time: record.check_out_time ? record.check_out_time.slice(0, 16) : "",
+        status: record.status || "Present"
+      });
+    } else {
+      setEditingRecord({ id: "new" });
+      setEditFormData({
+        guard_id: "",
+        duty_location_id: "",
+        check_in_time: "",
+        check_out_time: "",
+        status: "Present"
+      });
+    }
+    setShowEditModal(true);
+  }
+
+  async function handleSaveEdit() {
+    try {
+      const payload = {
+        guard_id: editFormData.guard_id || null,
+        duty_location_id: editFormData.duty_location_id || null,
+        check_in_time: editFormData.check_in_time ? new Date(editFormData.check_in_time).toISOString() : null,
+        check_out_time: editFormData.check_out_time ? new Date(editFormData.check_out_time).toISOString() : null,
+        status: editFormData.status
+      };
+      
+      if (companyId) payload.company_id = companyId;
+
+      if (editingRecord && editingRecord.id !== "new") {
+        const { error } = await supabase.from("attendance").update(payload).eq("id", editingRecord.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("attendance").insert([payload]);
+        if (error) throw error;
+      }
+      showToast("Attendance record saved successfully.", "success");
+      setShowEditModal(false);
+      setEditingRecord(null);
+      fetchAttendance();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
+
+  function startEdit(record) {
+    openEditModal(record);
+  }
+
 
   useEffect(() => {
     fetchGuards();
@@ -594,32 +666,290 @@ function Attendance({ role, userGuardId, hideHistory }) {
           )}
         </div>
 
-        {!hideHistory && (
-          <div className="space-y-4 mt-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-transparent mb-4">
-              <h3 className="text-lg font-bold text-gray-800">📋 Attendance History</h3>
-              <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                <button
-                  onClick={() => setShowFiltersModal(true)}
-                  className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap"
-                >
-                  🔍 Filter Option
-                </button>
+      {showCalendarModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 perspective" style={{ perspective: '1200px' }}>
+          <div 
+            className={`relative max-w-sm w-full h-[550px] transition-transform duration-700 animate-scale-in`} 
+            style={{ transformStyle: 'preserve-3d', transform: isCalendarFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+          >
+            {/* FRONT FACE: Calendar */}
+            <div 
+              className="absolute inset-0 bg-white rounded-3xl p-6 shadow-2xl border border-gray-150 overflow-hidden flex flex-col"
+              style={{ backfaceVisibility: 'hidden' }}
+            >
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <h3 className="text-lg font-bold text-gray-800">📅 Guard Calendar</h3>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setIsCalendarFlipped(true)} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition" title="View Performance">
+                    📊
+                  </button>
+                  <button onClick={() => setShowCalendarModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <CustomSelect
+                  value={calendarGuardId}
+                  onChange={val => setCalendarGuardId(val)}
+                  options={guards.map(g => ({ value: String(g.id), label: g.name }))}
+                  placeholder="Select Guard"
+                  heightClass="h-10"
+                />
+              </div>
+              
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))} className="p-2 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 font-bold transition">⬅️</button>
+                <h4 className="font-bold text-gray-700">{calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</h4>
+                <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))} className="p-2 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 font-bold transition">➡️</button>
+              </div>
 
-                <button
-                  onClick={downloadReportCSV}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap"
-                >
-                  📥 Export CSV
-                </button>
-                <button
-                  onClick={printReport}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap"
-                >
-                  🖨️ Print Report
+              <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} className="text-xs font-bold text-gray-400">{d}</div>)}
+              </div>
+            
+            <div className="grid grid-cols-7 gap-1">
+              {(() => {
+                const year = calendarMonth.getFullYear();
+                const month = calendarMonth.getMonth();
+                const firstDay = new Date(year, month, 1).getDay();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const days = Array(firstDay).fill(null);
+                for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+                
+                return days.map((d, i) => {
+                  if (!d) return <div key={`empty-${i}`} className="h-10"></div>;
+                  
+                  const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+                  const dateStr = localDate.toISOString().split("T")[0];
+                  
+                  const record = records.find(r => 
+                    String(r.guard_id) === String(calendarGuardId) && 
+                    ((r.check_in_time && r.check_in_time.startsWith(dateStr)) || (r.date && r.date.startsWith(dateStr)))
+                  );
+                  
+                  let bgClass = "bg-gray-50 text-gray-600 hover:bg-gray-100";
+                  if (record) {
+                    if (record.status === "Present" || record.status === "On Duty") bgClass = "bg-green-100 text-green-700 font-bold shadow-sm ring-1 ring-green-200";
+                    else if (record.status === "Leave" || record.status === "Half Day") bgClass = "bg-yellow-100 text-yellow-700 font-bold shadow-sm ring-1 ring-yellow-200";
+                    else if (record.status === "Absent") bgClass = "bg-red-100 text-red-700 font-bold shadow-sm ring-1 ring-red-200";
+                  }
+
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => setSelectedCalendarDate(record || { dummy: true, dateStr })}
+                      className={`h-10 rounded-xl flex items-center justify-center text-sm transition ${bgClass} ${selectedCalendarDate?.id === record?.id && record ? "ring-2 ring-indigo-500" : ""}`}
+                    >
+                      {d.getDate()}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              {selectedCalendarDate ? (() => {
+                const dateKey = selectedCalendarDate.dateStr || selectedCalendarDate;
+                const sel = typeof selectedCalendarDate === 'object' && !selectedCalendarDate.dummy ? selectedCalendarDate : records.find(r => String(r.guard_id) === String(calendarGuardId) && (r.check_in_time?.startsWith(dateKey) || r.date === dateKey));
+                if (!sel) return <p className="text-sm text-gray-500 italic">No records for {dateKey}</p>;
+                return (
+                  <div className="bg-gray-50 p-4 rounded-2xl">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-gray-800">{dateKey}</span>
+                      <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${sel.status === 'Present' || sel.status === 'On Duty' ? 'bg-green-200 text-green-800' : sel.status === 'Leave' || sel.status === 'Half Day' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'}`}>
+                        {sel.status}
+                      </span>
+                    </div>
+                    {sel.status === "Present" || sel.status === "On Duty" ? (
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-600"><span className="font-semibold w-16 inline-block">Check In:</span> {sel.check_in_time ? new Date(sel.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+                        <p className="text-xs text-gray-600"><span className="font-semibold w-16 inline-block">Check Out:</span> {sel.check_out_time ? new Date(sel.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 italic">Time records not applicable</p>
+                    )}
+                    <button onClick={() => { setShowCalendarModal(false); startEdit(sel); }} className="mt-3 text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-wide">
+                      ✏️ Edit Record
+                    </button>
+                  </div>
+                );
+              })() : (
+                <p className="text-sm text-gray-400 text-center italic py-2">Select a date to view details</p>
+              )}
+            </div>
+            
+            <div className="mt-4 flex gap-4 justify-center">
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span><span className="text-[10px] text-gray-500">Present</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span><span className="text-[10px] text-gray-500">Leave</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500"></span><span className="text-[10px] text-gray-500">Absent</span></div>
+            </div>
+          </div>
+
+          {/* BACK FACE: Stats Scorecard */}
+          <div 
+            className="absolute inset-0 bg-white rounded-3xl p-6 shadow-2xl border border-gray-150 flex flex-col"
+            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+          >
+            <div className="flex justify-between items-center mb-6 pb-3 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800">📊 Monthly Performance</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsCalendarFlipped(false)} className="p-1.5 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition" title="Back to Calendar">
+                  ↩️
                 </button>
               </div>
             </div>
+
+            {(() => {
+              const selectedMonthRecords = records.filter(r => {
+                if (String(r.guard_id) !== String(calendarGuardId)) return false;
+                const recDate = new Date(r.check_in_time || r.date);
+                return recDate.getFullYear() === calendarMonth.getFullYear() && recDate.getMonth() === calendarMonth.getMonth();
+              });
+              
+              const presentCount = selectedMonthRecords.filter(r => r.status === "Present" || r.status === "On Duty").length;
+              const leaveCount = selectedMonthRecords.filter(r => r.status === "Leave" || r.status === "Half Day").length;
+              const absentCount = selectedMonthRecords.filter(r => r.status === "Absent").length;
+
+              return (
+                <div className="space-y-4">
+                  <div className="text-center mb-6">
+                    <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                      {calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {guards.find(g => String(g.id) === String(calendarGuardId))?.name || "Unknown"}
+                    </p>
+                  </div>
+
+                  <div className="bg-green-50/50 border border-green-100 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold text-green-700 uppercase tracking-widest mb-1">Present Shifts</p>
+                      <p className="text-[10px] text-green-600/70">Working days / On Duty</p>
+                    </div>
+                    <span className="text-3xl font-black text-green-600">{presentCount}</span>
+                  </div>
+
+                  <div className="bg-yellow-50/50 border border-yellow-100 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold text-yellow-700 uppercase tracking-widest mb-1">Leaves Granted</p>
+                      <p className="text-[10px] text-yellow-600/70">Approved leaves & half days</p>
+                    </div>
+                    <span className="text-3xl font-black text-yellow-600">{leaveCount}</span>
+                  </div>
+
+                  <div className="bg-red-50/50 border border-red-100 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold text-red-700 uppercase tracking-widest mb-1">Unexcused Absences</p>
+                      <p className="text-[10px] text-red-600/70">Missed shifts without leave</p>
+                    </div>
+                    <span className="text-3xl font-black text-red-600">{absentCount}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="mt-auto">
+              <button 
+                onClick={() => setIsCalendarFlipped(false)}
+                className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl font-bold transition flex items-center justify-center gap-2"
+              >
+                ↩️ View Calendar
+              </button>
+            </div>
+          </div>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-[150] bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6">
+            <h3 className="font-bold text-lg mb-4">{editingRecord?.id === "new" ? "Add Manual Record" : "Edit Record"}</h3>
+            
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Guard</label>
+            <CustomSelect
+              value={editFormData.guard_id}
+              onChange={val => setEditFormData({ ...editFormData, guard_id: val })}
+              options={guards.map(g => ({ value: String(g.id), label: g.name }))}
+              placeholder="Select Guard"
+              heightClass="h-11"
+            />
+            
+            <label className="block text-xs font-semibold text-gray-500 mt-3 mb-1">Location</label>
+            <CustomSelect
+              value={editFormData.duty_location_id}
+              onChange={val => setEditFormData({ ...editFormData, duty_location_id: val })}
+              options={locations.map(l => ({ value: String(l.id), label: l.place_name }))}
+              placeholder="Select Location"
+              heightClass="h-11"
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Check In Time</label>
+                <input type="datetime-local" value={editFormData.check_in_time} onChange={(e) => setEditFormData({ ...editFormData, check_in_time: e.target.value })} className="w-full h-11 border border-gray-300 px-3 rounded-xl text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Check Out Time</label>
+                <input type="datetime-local" value={editFormData.check_out_time} onChange={(e) => setEditFormData({ ...editFormData, check_out_time: e.target.value })} className="w-full h-11 border border-gray-300 px-3 rounded-xl text-sm" />
+              </div>
+            </div>
+
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+            <CustomSelect
+              value={editFormData.status}
+              onChange={val => setEditFormData({ ...editFormData, status: val })}
+              options={[
+                { value: "Present", label: "Present" },
+                { value: "Absent", label: "Absent" },
+                { value: "Leave", label: "Leave" },
+                { value: "Half Day", label: "Half Day" }
+              ]}
+              placeholder="Select Status"
+              heightClass="h-11"
+            />
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowEditModal(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 font-bold text-sm hover:bg-gray-200 transition">Cancel</button>
+              <button onClick={handleSaveEdit} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition">Save Record</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-2">
+          <div className="space-y-4 mt-6">
+            <div className="glass-card rounded-2xl overflow-visible shadow-sm ring-1 ring-gray-200 bg-white">
+              <div className="px-6 py-5 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/30 rounded-t-2xl">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">📋 Attendance History</h3>
+                  <p className="text-sm text-gray-500 mt-1">Manage and view all guard attendance records</p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto relative z-20">
+                  {["admin", "super_admin"].includes(role) && (
+                    <>
+                      <button onClick={() => openEditModal()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
+                        ➕ Add Manual Entry
+                      </button>
+                      <button onClick={() => {
+                        setCalendarGuardId(filterGuard || (guards.length > 0 ? guards[0].id.toString() : ""));
+                        setCalendarMonth(new Date());
+                        setSelectedCalendarDate(null);
+                        setShowCalendarModal(true);
+                      }} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
+                        📅 Calendar
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => setShowFiltersModal(true)} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
+                    🔍 Filter
+                  </button>
+                  <button onClick={downloadReportCSV} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
+                    ⬇️ Download
+                  </button>
+                </div>
+              </div>
 
             {/* Filter Overlay Popup Modal */}
             {showFiltersModal && (

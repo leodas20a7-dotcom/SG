@@ -951,6 +951,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                   </button>
                 </div>
               </div>
+            </div>
 
             {/* Filter Overlay Popup Modal */}
             {showFiltersModal && (

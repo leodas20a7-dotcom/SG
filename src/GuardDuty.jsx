@@ -1045,6 +1045,10 @@ function GuardDuty({ guardId, guardName, companyId }) {
         setError(`Error marking attendance: ${err.message || err.code || JSON.stringify(err)}`);
         setLoading(false); return;
       }
+
+      // Force update the check_in_photo since the mark_checkin RPC ignores it
+      await supabase.from("attendance").update({ check_in_photo: photoUrl }).eq("id", data[0].id);
+
       const serverNow = data[0].check_in_time;
       setIsOnDuty(true); setCurrentAttendanceId(data[0].id); setOnDutySince(serverNow);
       startLiveTracking(data[0].id);
@@ -1143,6 +1147,9 @@ function GuardDuty({ guardId, guardName, companyId }) {
       });
       if (err) { setError("Error checking out."); setLoading(false); return; }
       
+      // Force update the check_out_photo since the mark_checkout RPC ignores it
+      await supabase.from("attendance").update({ check_out_photo: photoUrl }).eq("id", currentAttendanceId);
+
       const serverNow = data[0].check_out_time;
       calculatedStatus = calculateAttendanceStatus(todayRecord?.check_in_time, serverNow, activeShift);
       if (calculatedStatus !== "Present" && calculatedStatus !== data[0].status) {

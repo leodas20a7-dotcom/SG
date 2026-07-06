@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
+import { useToast } from "./Toast";
+import { FaSpinner } from "react-icons/fa";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 function GuardProfiles({ companyId }) {
   const [guards, setGuards] = useState([]);
@@ -8,6 +12,135 @@ function GuardProfiles({ companyId }) {
   const [activePreviewDoc, setActivePreviewDoc] = useState(null);
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
+  const { showToast } = useToast();
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [selectedReportMonth, setSelectedReportMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const downloadGuardReport = async (guard) => {
+    if (!guard) return;
+    setIsGeneratingPDF(true);
+    showToast("Generating PDF Report...", "info");
+
+    try {
+      const [year, month] = selectedReportMonth.split("-");
+      const reportDate = new Date(year, parseInt(month) - 1, 1);
+
+      const monthStart = new Date(reportDate.getFullYear(), reportDate.getMonth(), 1).toISOString();
+      const monthEnd = new Date(reportDate.getFullYear(), reportDate.getMonth() + 1, 0).toISOString();
+
+      const { data: att } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("guard_id", guard.id)
+        .gte("check_in_time", monthStart)
+        .lte("check_in_time", monthEnd);
+
+      const { data: sh } = await supabase
+        .from("shifts")
+        .select("*")
+        .eq("guard_id", guard.id);
+
+      const totalPresent = att ? att.filter(r => r.status === "Present" || r.status === "On Duty").length : 0;
+      const totalAbsent = att ? att.filter(r => r.status === "Absent").length : 0;
+      const totalLeave = att ? att.filter(r => r.status === "Leave" || r.status === "Half Day").length : 0;
+
+      let totalHours = 0;
+      let punctualityCount = 0;
+      let checkedInCount = 0;
+
+      att?.forEach(r => {
+        if (r.check_in_time && r.check_out_time) {
+          const hours = (new Date(r.check_out_time) - new Date(r.check_in_time)) / (1000 * 60 * 60);
+          totalHours += hours > 0 ? hours : 0;
+        }
+        if (r.check_in_time && r.status !== "Leave" && r.status !== "Absent") {
+          checkedInCount++;
+          const activeShift = sh?.find(s => s.shift_date === null);
+          if (activeShift && activeShift.start_time) {
+            const checkInDate = new Date(r.check_in_time);
+            const [shH, shM] = activeShift.start_time.split(":");
+            const scheduledStart = new Date(checkInDate);
+            scheduledStart.setHours(parseInt(shH), parseInt(shM), 0, 0);
+            if ((checkInDate - scheduledStart) / (1000 * 60) <= 15) {
+              punctualityCount++;
+            }
+          } else {
+            const h = new Date(r.check_in_time).getHours();
+            const m = new Date(r.check_in_time).getMinutes();
+            if (h < 9 || (h === 9 && m === 0)) punctualityCount++;
+          }
+        }
+      });
+
+      const punctualityRate = checkedInCount > 0 ? Math.round((punctualityCount / checkedInCount) * 100) : 0;
+      const overallScore = (totalPresent + totalAbsent) > 0
+        ? Math.min(100, Math.round((totalPresent / (totalPresent + totalAbsent)) * 60 + (punctualityRate * 0.4)))
+        : 0;
+
+      const doc = new jsPDF();
+
+      // Load and Draw App Logo
+      const img = new Image();
+      img.src = '/logo.png';
+      await new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+      doc.addImage(img, 'PNG', 14, 14, 12, 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(22);
+      doc.setTextColor(40, 40, 40);
+      doc.text("Guard Performance Report", 30, 22);
+
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Guard Name: ${guard.name}`, 14, 32);
+      const dateStr = reportDate.toLocaleDateString('default', { month: 'long', year: 'numeric' });
+      doc.text(`Report Month: ${dateStr}`, 14, 38);
+
+      autoTable(doc, {
+        startY: 45,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Overall Performance Score', `${overallScore}%`],
+          ['Punctuality Rate', `${punctualityRate}%`],
+          ['Total Hours Worked', `${totalHours.toFixed(1)} hrs`],
+          ['Present Shifts', `${totalPresent}`],
+          ['Leaves Granted', `${totalLeave}`],
+          ['Unexcused Absences', `${totalAbsent}`]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+        styles: { fontSize: 11, cellPadding: 6 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 100 }, 1: { cellWidth: 'auto' } }
+      });
+
+      // Add Calculation Logic in Footer
+      const finalY = doc.lastAutoTable.finalY + 15;
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      doc.setFont("helvetica", "bold");
+      doc.text("Calculation Methodology:", 14, finalY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text("• Punctuality Rate: Percentage of shifts where check-in occurred within 15 mins of start time.", 14, finalY + 6);
+      doc.text("• Overall Performance Score: Weighted average of Shift Attendance (60%) and Punctuality (40%).", 14, finalY + 11);
+
+      doc.save(`Guard_Report_${(guard.name || "Guard").replace(/\s+/g, '_')}_${dateStr}.pdf`);
+      showToast("PDF Report downloaded successfully!", "success");
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      showToast("Failed to generate PDF.", "error");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   async function handleFileUpload(e, guardId, column) {
     const file = e.target.files[0];
@@ -169,7 +302,18 @@ function GuardProfiles({ companyId }) {
           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="font-bold text-gray-800 text-lg">Guard Details</h2>
-              <button onClick={() => setSelectedGuard(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm text-gray-500 hover:bg-gray-50 transition">✕</button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => downloadGuardReport(selectedGuard)}
+                  disabled={isGeneratingPDF}
+                  className={`bg-indigo-50 text-indigo-700 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 transition shadow-sm border border-indigo-100 ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-100'}`}
+                  title="Download Monthly Report PDF"
+                >
+                  {isGeneratingPDF ? <FaSpinner className="w-3.5 h-3.5 animate-spin" /> : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>}
+                  <span className="hidden sm:inline">Report</span> PDF
+                </button>
+                <button onClick={() => setSelectedGuard(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm text-gray-500 hover:bg-gray-50 transition">✕</button>
+              </div>
             </div>
             
             <div className="p-6 overflow-y-auto">

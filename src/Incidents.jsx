@@ -9,6 +9,31 @@ import { shortId } from "./lib/shortId";
 const INCIDENT_TYPES = ["Theft", "Fire", "Fight", "Suspicious Activity", "Emergency", "Visitor Issue", "Others"];
 const STATUS_OPTIONS = ["Open", "Investigating", "Closed"];
 
+// Audio Player Component for Table View
+function AudioPlayer({ src }) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handleEnded = () => setPlaying(false);
+    audio.addEventListener("ended", handleEnded);
+    return () => audio.removeEventListener("ended", handleEnded);
+  }, []);
+  const togglePlay = () => {
+    if (playing) { audioRef.current.pause(); setPlaying(false); }
+    else { audioRef.current.play(); setPlaying(true); }
+  };
+  return (
+    <div className="flex items-center">
+      <audio ref={audioRef} src={src} className="hidden" />
+      <button onClick={togglePlay} className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold shadow-sm transition hover:bg-purple-200">
+        {playing ? "⏹ Stop" : "▶ Play Audio"}
+      </button>
+    </div>
+  );
+}
+
 function Incidents({ role, currentGuardId, companyId: adminCompanyId }) {
 
   const [incidents, setIncidents] = useState([]);
@@ -31,30 +56,6 @@ function Incidents({ role, currentGuardId, companyId: adminCompanyId }) {
 
   const { showToast, ToastContainer } = useToast();
 
-  // Audio Player Component for Table View
-  function AudioPlayer({ src }) {
-    const [playing, setPlaying] = useState(false);
-    const audioRef = useRef(null);
-    useEffect(() => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      const handleEnded = () => setPlaying(false);
-      audio.addEventListener("ended", handleEnded);
-      return () => audio.removeEventListener("ended", handleEnded);
-    }, []);
-    const togglePlay = () => {
-      if (playing) { audioRef.current.pause(); setPlaying(false); }
-      else { audioRef.current.play(); setPlaying(true); }
-    };
-    return (
-      <div className="flex items-center">
-        <audio ref={audioRef} src={src} className="hidden" />
-        <button onClick={togglePlay} className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold shadow-sm transition hover:bg-purple-200">
-          {playing ? "⏹ Stop" : "▶ Play Audio"}
-        </button>
-      </div>
-    );
-  }
 
   async function fetchIncidents() {
     try {

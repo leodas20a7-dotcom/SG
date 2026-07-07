@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import LoadingOverlay from "./LoadingOverlay";
 import ConfirmModal from "./ConfirmModal";
+import CustomSelect from "./CustomSelect";
 
 const SHIFT_OPTIONS = ["Morning Shift", "Evening Shift", "Night Shift", "Full Day"];
 const DEFAULT_TIMINGS = {
@@ -21,8 +22,53 @@ function Settings({ onStartTour }) {
   const [activeDetailsModal, setActiveDetailsModal] = useState(null);
   
   const [timezone, setTimezone] = useState("UTC");
+  const [enableSevenDayShifts, setEnableSevenDayShifts] = useState(false);
   const [companyId, setCompanyId] = useState(null);
-  const TIMEZONES = Intl.supportedValuesOf('timeZone');
+  const TIMEZONES = [
+    { label: "United States (New York)", value: "America/New_York" },
+    { label: "United States (Los Angeles)", value: "America/Los_Angeles" },
+    { label: "United Kingdom", value: "Europe/London" },
+    { label: "India", value: "Asia/Kolkata" },
+    { label: "Australia (Sydney)", value: "Australia/Sydney" },
+    { label: "Australia (Melbourne)", value: "Australia/Melbourne" },
+    { label: "Australia (Brisbane)", value: "Australia/Brisbane" },
+    { label: "Australia (Perth)", value: "Australia/Perth" },
+    { label: "Australia (Adelaide)", value: "Australia/Adelaide" },
+    { label: "Australia (Hobart)", value: "Australia/Hobart" },
+    { label: "Australia (Darwin)", value: "Australia/Darwin" },
+    { label: "Canada (Toronto)", value: "America/Toronto" },
+    { label: "Singapore", value: "Asia/Singapore" },
+    { label: "United Arab Emirates", value: "Asia/Dubai" },
+    { label: "Germany", value: "Europe/Berlin" },
+    { label: "France", value: "Europe/Paris" },
+    { label: "Japan", value: "Asia/Tokyo" },
+    { label: "China", value: "Asia/Shanghai" },
+    { label: "South Africa", value: "Africa/Johannesburg" },
+    { label: "Brazil (Sao Paulo)", value: "America/Sao_Paulo" },
+    { label: "Mexico (Mexico City)", value: "America/Mexico_City" },
+    { label: "New Zealand", value: "Pacific/Auckland" },
+    { label: "Malaysia", value: "Asia/Kuala_Lumpur" },
+    { label: "Philippines", value: "Asia/Manila" },
+    { label: "Indonesia (Jakarta)", value: "Asia/Jakarta" },
+    { label: "Saudi Arabia", value: "Asia/Riyadh" },
+    { label: "Egypt", value: "Africa/Cairo" },
+    { label: "Nigeria", value: "Africa/Lagos" },
+    { label: "Kenya", value: "Africa/Nairobi" },
+    { label: "South Korea", value: "Asia/Seoul" },
+    { label: "Pakistan", value: "Asia/Karachi" },
+    { label: "Bangladesh", value: "Asia/Dhaka" },
+    { label: "Turkey", value: "Europe/Istanbul" },
+    { label: "Italy", value: "Europe/Rome" },
+    { label: "Spain", value: "Europe/Madrid" },
+    { label: "Argentina", value: "America/Argentina/Buenos_Aires" },
+    { label: "Colombia", value: "America/Bogota" },
+    { label: "Peru", value: "America/Lima" },
+    { label: "Chile", value: "America/Santiago" },
+    { label: "Thailand", value: "Asia/Bangkok" },
+    { label: "Vietnam", value: "Asia/Ho_Chi_Minh" },
+    { label: "Israel", value: "Asia/Jerusalem" },
+    { label: "UTC (Default)", value: "UTC" }
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
   useEffect(() => {
     async function loadCompanySettings() {
@@ -31,23 +77,27 @@ function Settings({ onStartTour }) {
       const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
       if (profile?.company_id) {
         setCompanyId(profile.company_id);
-        const { data: company } = await supabase.from("companies").select("timezone").eq("id", profile.company_id).single();
+        const { data: company } = await supabase.from("companies").select("timezone, enable_seven_day_shifts").eq("id", profile.company_id).single();
         if (company?.timezone) setTimezone(company.timezone);
+        if (company?.enable_seven_day_shifts) setEnableSevenDayShifts(company.enable_seven_day_shifts);
       }
     }
     loadCompanySettings();
   }, []);
 
-  async function saveTimezone() {
+  async function saveCompanySettings() {
     if (!companyId) return;
     setLoading(true);
-    setLoadingMsg("Saving time zone...");
+    setLoadingMsg("Saving company settings...");
     try {
-      const { error } = await supabase.from("companies").update({ timezone }).eq("id", companyId);
+      const { error } = await supabase.from("companies").update({ 
+        timezone,
+        enable_seven_day_shifts: enableSevenDayShifts
+      }).eq("id", companyId);
       if (error) throw error;
-      showToast("Time zone updated globally!", "success");
+      showToast("Company settings updated globally!", "success");
     } catch (e) {
-      showToast("Failed to update time zone.", "error");
+      showToast("Failed to update company settings.", "error");
     }
     setLoading(false);
   }
@@ -550,21 +600,41 @@ function Settings({ onStartTour }) {
           
           <div className="p-4 bg-white rounded-2xl border border-slate-100/80 shadow-sm">
             <label className="block text-[10px] text-slate-400 mb-1 font-bold uppercase tracking-wider">Select Time Zone</label>
-            <select
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              className="w-full md:w-1/2 h-10 border border-gray-200 px-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white text-xs transition mb-4"
-            >
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>{tz}</option>
-              ))}
-            </select>
-            <div className="flex justify-end pt-2 border-t border-slate-150">
+            <div className="w-full md:w-1/2 mb-4">
+              <CustomSelect
+                value={timezone}
+                onChange={(val) => setTimezone(val)}
+                options={TIMEZONES}
+                placeholder="Select Time Zone"
+                searchable={true}
+              />
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-150">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={enableSevenDayShifts}
+                    onChange={(e) => setEnableSevenDayShifts(e.target.checked)}
+                    className="w-5 h-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white checked:bg-indigo-500 checked:border-indigo-500 transition-colors peer"
+                  />
+                  <svg className="absolute w-3.5 h-3.5 text-white left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">Enable 7-Day Shifts (Includes Sunday)</span>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">Allows scheduling shifts on Sunday. Useful for sites operating 7 days a week.</p>
+                </div>
+              </label>
+            </div>
+            
+            <div className="flex justify-end pt-4 mt-4 border-t border-slate-150">
               <button
-                onClick={saveTimezone}
+                onClick={saveCompanySettings}
                 className="btn-primary-premium px-5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
               >
-                Save Time Zone
+                Save Settings
               </button>
             </div>
           </div>

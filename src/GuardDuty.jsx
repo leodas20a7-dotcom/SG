@@ -4,6 +4,7 @@ import Camera from "./Camera";
 import { calcDistance, getLocation, uploadPhoto, calculateAttendanceStatus } from "./lib/geoUtils";
 import Notifications from "./Notifications";
 import DarkModeToggle from "./DarkModeToggle";
+import ConfirmModal from "./ConfirmModal";
 
 const Incidents = React.lazy(() => import("./Incidents"));
 import { addToQueue, getQueue, removeFromQueue, setCached, getCached } from "./lib/offlineDb";
@@ -411,6 +412,7 @@ function GuardDuty({ guardId, guardName, companyId }) {
   const [showRequestHistory, setShowRequestHistory] = useState(false);
   const [dutyLocation, setDutyLocation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [dutyCompletePopup, setDutyCompletePopup] = useState(null);
@@ -790,12 +792,14 @@ function GuardDuty({ guardId, guardName, companyId }) {
       // 1. Search for active check-in (check_out_time is null) started within the last 16 hours
       // This prevents forgotten shifts from continuing forever and handles night shifts crossing midnight.
       const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
+      const futureLimit = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       let { data } = await supabase
         .from("attendance")
         .select("*, duty_locations(place_name)")
         .eq("guard_id", guardId)
         .is("check_out_time", null)
         .gte("check_in_time", sixteenHoursAgo)
+        .lte("check_in_time", futureLimit)
         .order("check_in_time", { ascending: false })
         .limit(1);
 
@@ -806,6 +810,7 @@ function GuardDuty({ guardId, guardName, companyId }) {
           .select("*, duty_locations(place_name)")
           .eq("guard_id", guardId)
           .gte("check_in_time", sixteenHoursAgo)
+          .lte("check_in_time", futureLimit)
           .order("check_in_time", { ascending: false })
           .limit(1);
         data = recentRecords;
@@ -1318,8 +1323,15 @@ function GuardDuty({ guardId, guardName, companyId }) {
     } catch (err) { setError(err.message); }
     setSubmitting(false);
   }
+  function handleLogout() {
+    setShowLogoutConfirm(true);
+  }
 
-  async function handleLogout() { stopLiveTracking(); await supabase.auth.signOut(); window.location.reload(); }
+  async function confirmLogout() { 
+    stopLiveTracking(); 
+    await supabase.auth.signOut(); 
+    window.location.reload(); 
+  }
 
   const statusColour = gpsType === "success" ? "bg-blue-50 border-blue-200 text-blue-700"
     : gpsType === "warn" ? "bg-amber-50 border-amber-200 text-amber-700"
@@ -1507,7 +1519,9 @@ function GuardDuty({ guardId, guardName, companyId }) {
               <div>
                 <p className="font-semibold text-gray-800 md:text-base">{fmtDate(item.check_in_time)}</p>
                 {loc && <p className="text-xs text-blue-600 mt-0.5">📍 {loc}</p>}
-                <p className="text-xs text-gray-400 mt-1">In: {fmt(item.check_in_time)} &nbsp;·&nbsp; Out: {fmt(item.check_out_time)}</p>
+                {item.status !== "Leave" && (
+                  <p className="text-xs text-gray-400 mt-1">In: {fmt(item.check_in_time)} &nbsp;·&nbsp; Out: {fmt(item.check_out_time)}</p>
+                )}
               </div>
               {(() => {
                 let displayStatus = item.status;
@@ -1700,7 +1714,7 @@ function GuardDuty({ guardId, guardName, companyId }) {
                       <span className={`font-bold uppercase text-[10px] px-2 py-0.5 rounded shadow-sm ${selectedCalendarDate.status === "Present" || selectedCalendarDate.status === "On Duty" ? "bg-green-100 text-green-700" : selectedCalendarDate.status === "Leave" || selectedCalendarDate.status === "Half Day" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>{selectedCalendarDate.status}</span>
                     </div>
                     <div className="text-xs text-gray-500 mt-2 space-y-1">
-                      {selectedCalendarDate.status === "Leave" || selectedCalendarDate.status === "Absent" ? (
+                      {selectedCalendarDate.status === "Leave" ? (
                         <p className="italic">Time records not applicable</p>
                       ) : (
                         <>
@@ -2186,6 +2200,14 @@ function GuardDuty({ guardId, guardName, companyId }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showLogoutConfirm && (
+        <ConfirmModal
+          message="Are you sure you want to log out?"
+          onConfirm={confirmLogout}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
       )}
     </>
   );

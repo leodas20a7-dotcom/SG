@@ -119,6 +119,23 @@ function Analytics({ role, onNavigate, companyId }) {
   const [barData, setBarData] = useState({ labels: [], datasets: [] });
   const [pieData, setPieData] = useState({ labels: [], datasets: [] });
 
+  function formatRelativeTime(dateString) {
+    if (!dateString) return "Unknown";
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / 86400000);
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (diffDays === 0 && date.getDate() === now.getDate()) {
+      return `Today, ${timeStr}`;
+    } else if (diffDays === 1 || (diffDays === 0 && date.getDate() !== now.getDate())) {
+      return `Yesterday, ${timeStr}`;
+    } else {
+      return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeStr}`;
+    }
+  }
+
     // Fetch basic counts and dashboard analytics
   async function fetchSummary() {
     try {
@@ -209,17 +226,17 @@ function Analytics({ role, onNavigate, companyId }) {
           if (item.check_out_time) {
             activityList.push({
               type: "patrol_completed",
-              text: `Patrol completed at ${item.duty_locations?.place_name || "Main Gate"}`,
+              text: `Patrol completed${item.duty_locations?.place_name ? ` at ${item.duty_locations.place_name}` : ""}`,
               subtitle: `Guard: ${item.guards?.name || "Unknown"}`,
-              time: timeStr,
+              time: formatRelativeTime(item.check_out_time),
               timestamp: new Date(item.check_out_time).getTime()
             });
           } else if (item.check_in_time) {
             activityList.push({
               type: "shift_started",
-              text: `Shift started at ${item.duty_locations?.place_name || "North Zone"}`,
+              text: `Shift started${item.duty_locations?.place_name ? ` at ${item.duty_locations.place_name}` : ""}`,
               subtitle: `Guard: ${item.guards?.name || "Unknown"}`,
-              time: timeStr,
+              time: formatRelativeTime(item.check_in_time),
               timestamp: new Date(item.check_in_time).getTime()
             });
           }
@@ -241,9 +258,9 @@ function Analytics({ role, onNavigate, companyId }) {
         recentInc.forEach(item => {
           activityList.push({
             type: "incident",
-            text: `Incident reported at ${item.place_name || "Parking Area"}`,
+            text: `Incident reported${item.place_name ? ` at ${item.place_name}` : ""}`,
             subtitle: `Type: ${item.incident_type || "General Alert"}`,
-            time: "Yesterday",
+            time: formatRelativeTime(item.created_at),
             timestamp: new Date(item.created_at).getTime()
           });
         });
@@ -266,7 +283,7 @@ function Analytics({ role, onNavigate, companyId }) {
             type: "guard_added",
             text: "New guard added",
             subtitle: `Guard: ${item.name}`,
-            time: "Yesterday",
+            time: formatRelativeTime(item.created_at),
             timestamp: item.created_at ? new Date(item.created_at).getTime() : Date.now() - 86400000
           });
         });
@@ -1246,6 +1263,7 @@ function Analytics({ role, onNavigate, companyId }) {
                   ...guards.map(g => ({ value: String(g.id), label: g.name }))
                 ]}
                 placeholder="Select a guard..."
+                searchable={true}
               />
             </div>
           </div>
@@ -1323,6 +1341,7 @@ function Analytics({ role, onNavigate, companyId }) {
                     ...guards.map(g => ({ value: String(g.id), label: g.name }))
                   ]}
                   placeholder="Choose a guard..."
+                  searchable={true}
                 />
               </div>
               <div>
@@ -1469,6 +1488,7 @@ function Analytics({ role, onNavigate, companyId }) {
                     ...guards.map(g => ({ value: String(g.id), label: g.name }))
                   ]}
                   placeholder="All Guards"
+                  searchable={true}
                 />
               </div>
               <div>
@@ -1481,6 +1501,7 @@ function Analytics({ role, onNavigate, companyId }) {
                     ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
                   ]}
                   placeholder="All Locations"
+                  searchable={true}
                 />
               </div>
               <div>

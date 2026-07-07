@@ -4,7 +4,7 @@ import { useToast } from "./Toast";
 import CustomSelect from "./CustomSelect";
 import { FaCalendarAlt, FaClipboardList, FaExclamationCircle, FaUserClock, FaCheckCircle, FaTimes, FaChevronLeft, FaChevronRight, FaMapMarkerAlt } from "react-icons/fa";
 
-const DAYS_OF_WEEK = [
+const BASE_DAYS_OF_WEEK = [
   { label: "Mon", short: "M", full: "Monday", dow: 0 },
   { label: "Tue", short: "T", full: "Tuesday", dow: 1 },
   { label: "Wed", short: "W", full: "Wednesday", dow: 2 },
@@ -13,8 +13,15 @@ const DAYS_OF_WEEK = [
   { label: "Sat", short: "S", full: "Saturday", dow: 5 },
 ];
 
-function makeEmptySchedule() {
-  return DAYS_OF_WEEK.map(d => ({ dow: d.dow, locationId: "", shiftName: "", startTime: "", endTime: "", label: d.label, full: d.full }));
+function getDaysOfWeek(isSevenDayEnabled) {
+  if (isSevenDayEnabled) {
+    return [...BASE_DAYS_OF_WEEK, { label: "Sun", short: "S", full: "Sunday", dow: 6 }];
+  }
+  return BASE_DAYS_OF_WEEK;
+}
+
+function makeEmptySchedule(isSevenDayEnabled = false) {
+  return getDaysOfWeek(isSevenDayEnabled).map(d => ({ dow: d.dow, locationId: "", shiftName: "", startTime: "", endTime: "", label: d.label, full: d.full }));
 }
 
 function Shifts({ companyId, onNavigate }) {
@@ -22,6 +29,7 @@ function Shifts({ companyId, onNavigate }) {
   const [locations, setLocations] = useState([]);
   const [shiftTimings, setShiftTimings] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isSevenDayEnabled, setIsSevenDayEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState("pending"); // 'pending' or 'assigned'
   const [selectedGuard, setSelectedGuard] = useState(null);
   const [weeklySchedule, setWeeklySchedule] = useState(makeEmptySchedule());
@@ -53,11 +61,24 @@ function Shifts({ companyId, onNavigate }) {
       }
       
       const timingQuery = supabase.from("shift_timings").select("*");
+      
+      let companyQuery;
+      if (companyId) {
+        companyQuery = supabase.from("companies").select("enable_seven_day_shifts").eq("id", companyId).single();
+      } else {
+        companyQuery = Promise.resolve({ data: null, error: null });
+      }
 
-      const [guardsRes, locsRes, timingsRes] = await Promise.all([query, locQuery, timingQuery]);
+      const [guardsRes, locsRes, timingsRes, companyRes] = await Promise.all([query, locQuery, timingQuery, companyQuery]);
 
       if (guardsRes.error) throw guardsRes.error;
       if (locsRes.error) throw locsRes.error;
+      
+      const sevenDayEnabled = companyRes?.data?.enable_seven_day_shifts || false;
+      setIsSevenDayEnabled(sevenDayEnabled);
+      if (!selectedGuard) {
+        setWeeklySchedule(makeEmptySchedule(sevenDayEnabled));
+      }
       if (timingsRes.error) console.error("Timings error (ignored):", timingsRes.error);
 
       // Filter shifts to only include weekly shifts (shift_date is null and day_of_week is not null)
@@ -98,20 +119,22 @@ function Shifts({ companyId, onNavigate }) {
 
   function handleSelectGuard(guard) {
     setSelectedGuard(guard);
-    const freshSchedule = makeEmptySchedule();
-    if (guard.weeklyShifts && guard.weeklyShifts.length > 0) {
+    setCopiedDay(null);
+    
+    // Build schedule array matching getDaysOfWeek length
+    const schedule = makeEmptySchedule(isSevenDayEnabled);
+    if (guard && guard.weeklyShifts && guard.weeklyShifts.length > 0) {
       guard.weeklyShifts.forEach(s => {
-        const idx = freshSchedule.findIndex(d => d.dow === s.day_of_week);
+        const idx = schedule.findIndex(d => Number(d.dow) === Number(s.day_of_week));
         if (idx !== -1) {
-          freshSchedule[idx].locationId = s.duty_location_id ? String(s.duty_location_id) : "";
-          freshSchedule[idx].shiftName = s.shift_label || "";
-          freshSchedule[idx].startTime = s.start_time ? s.start_time.substring(0, 5) : "";
-          freshSchedule[idx].endTime = s.end_time ? s.end_time.substring(0, 5) : "";
+          schedule[idx].locationId = s.duty_location_id ? String(s.duty_location_id) : "";
+          schedule[idx].shiftName = s.shift_label || "";
+          schedule[idx].startTime = s.start_time ? s.start_time.substring(0, 5) : "";
+          schedule[idx].endTime = s.end_time ? s.end_time.substring(0, 5) : "";
         }
       });
     }
-    setWeeklySchedule(freshSchedule);
-    setCopiedDay(null);
+    setWeeklySchedule(schedule);
   }
 
   async function saveAssignment() {
@@ -238,7 +261,7 @@ function Shifts({ companyId, onNavigate }) {
 
                     // Determine status
                     let isFullyAssigned = false;
-                    if (guard.weeklyShifts && guard.weeklyShifts.length >= 6) {
+                    if (guard.weeklyShifts && guard.weeklyShifts.length >= (isSevenDayEnabled ? 7 : 6)) {
                       isFullyAssigned = true;
                     }
                     const avatarLetter = guard.name ? guard.name.charAt(0).toUpperCase() : "?";
@@ -267,7 +290,7 @@ function Shifts({ companyId, onNavigate }) {
                               {(guard.weeklyShifts && guard.weeklyShifts.length > 0) ? (
                                 <div 
                                   className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${isFullyAssigned ? "bg-emerald-500" : "bg-amber-400"}`} 
-                                  title={isFullyAssigned ? "Fully Assigned (6+ days)" : "Partially Assigned"}
+                                  title={isFullyAssigned ? "Fully Assigned" : "Partially Assigned"}
                                 ></div>
                               ) : null}
                             </div>
@@ -389,6 +412,7 @@ function Shifts({ companyId, onNavigate }) {
                               options={[{ value: "", label: "Select Site" }, ...locations.map(l => ({ value: String(l.id), label: l.place_name }))]}
                               placeholder="Select Site"
                               heightClass="h-9"
+                              searchable={true}
                             />
                           </div>
 

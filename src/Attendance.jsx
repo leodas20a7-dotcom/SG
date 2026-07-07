@@ -7,7 +7,7 @@ import LoadingOverlay from "./LoadingOverlay";
 import CustomSelect from "./CustomSelect";
 import ConfirmModal from "./ConfirmModal";
 
-function Attendance({ role, userGuardId, hideHistory }) {
+function Attendance({ role, userGuardId, hideHistory, companyId }) {
   const [guards, setGuards] = useState([]);
   const [records, setRecords] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -33,6 +33,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [showFiltersModal, setShowFiltersModal] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,6 +43,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
 
   // Confirm Modal state
   const [confirmConfig, setConfirmConfig] = useState(null);
+  const [highlightedRecordId, setHighlightedRecordId] = useState(null);
 
   const [editingRecord, setEditingRecord] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -101,8 +103,8 @@ function Attendance({ role, userGuardId, hideHistory }) {
       r.guards?.name || "Unknown",
       r.check_in_time?.split("T")[0] || r.date || "—",
       r.duty_locations?.place_name || "—",
-      r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString() : r.check_in || "—",
-      r.check_out_time ? new Date(r.check_out_time).toLocaleTimeString() : r.check_out || "—",
+      r.check_in_time ? (r.status?.toUpperCase() === 'LEAVE' ? "—" : new Date(r.check_in_time).toLocaleTimeString()) : r.check_in || "—",
+      r.check_out_time ? (r.status?.toUpperCase() === 'LEAVE' ? "—" : new Date(r.check_out_time).toLocaleTimeString()) : r.check_out || "—",
       r.status
     ]);
     const csvContent = [headers, ...rows].map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -129,8 +131,8 @@ function Attendance({ role, userGuardId, hideHistory }) {
         <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.guards?.name || "Unknown"}</td>
         <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.check_in_time?.split("T")[0] || r.date || "—"}</td>
         <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.duty_locations?.place_name || "—"}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString() : r.check_in || "—"}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.check_out_time ? new Date(r.check_out_time).toLocaleTimeString() : r.check_out || "—"}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.check_in_time ? (r.status?.toUpperCase() === 'LEAVE' ? "—" : new Date(r.check_in_time).toLocaleTimeString()) : r.check_in || "—"}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${r.check_out_time ? (r.status?.toUpperCase() === 'LEAVE' ? "—" : new Date(r.check_out_time).toLocaleTimeString()) : r.check_out || "—"}</td>
         <td style="padding: 10px; border-bottom: 1px solid #ddd; font-weight: bold;">${r.status}</td>
       </tr>
     `).join("");
@@ -181,16 +183,23 @@ function Attendance({ role, userGuardId, hideHistory }) {
 
   async function fetchGuards() {
     try {
-      const { data } = await supabase.from("guards").select("*");
+      let q = supabase.from("guards").select("*");
+      if (companyId) q = q.eq("company_id", companyId);
+      const { data } = await q;
       setGuards(data || []);
     } catch { showToast("Could not load guards list.", "error"); }
   }
 
   async function fetchAttendance() {
     try {
-      const { data } = await supabase.from("attendance").select(`*, guards(name), duty_locations(place_name)`).order("id", { ascending: false });
+      let q = supabase.from("attendance").select(`*, guards(name), duty_locations(place_name)`).order("id", { ascending: false });
+      if (companyId) q = q.eq("company_id", companyId);
+      const { data } = await q;
       setRecords(data || []);
-      const { data: shiftsData } = await supabase.from("shifts").select("*");
+      
+      let sq = supabase.from("shifts").select("*");
+      if (companyId) sq = sq.eq("company_id", companyId);
+      const { data: shiftsData } = await sq;
       setShifts(shiftsData || []);
     } catch { showToast("Could not load attendance records.", "error"); }
   }
@@ -229,7 +238,9 @@ function Attendance({ role, userGuardId, hideHistory }) {
 
   async function fetchLocations() {
     try {
-      const { data } = await supabase.from("duty_locations").select("*");
+      let q = supabase.from("duty_locations").select("*");
+      if (companyId) q = q.eq("company_id", companyId);
+      const { data } = await q;
       setLocations(data || []);
     } catch { /* table may not exist yet */ }
   }
@@ -332,6 +343,52 @@ function Attendance({ role, userGuardId, hideHistory }) {
       stopLiveTracking();
     }
   }, [isOnDuty, currentAttendanceId, guards]);
+
+  // Auto-open edit modal if redirected from another page (e.g. approving a request)
+  useEffect(() => {
+    if (records.length > 0) {
+      const editGuardId = sessionStorage.getItem("open_edit_modal_for_guard");
+      const editDate = sessionStorage.getItem("open_edit_modal_for_date");
+      
+      console.log("Auto-open check:", { editGuardId, editDate, recordsLength: records.length });
+      
+      if (editGuardId && editDate) {
+        const record = records.find(r => 
+          String(r.guard_id) === String(editGuardId) && 
+          (r.date === editDate || (r.check_in_time && r.check_in_time.startsWith(editDate)))
+        );
+        console.log("Found record to edit:", record);
+        
+        if (record) {
+          setHighlightedRecordId(record.id);
+          const recordIndex = filteredRecords.findIndex(r => r.id === record.id);
+          if (recordIndex !== -1) {
+            const page = Math.floor(recordIndex / itemsPerPage) + 1;
+            setCurrentPage(page);
+          }
+          sessionStorage.removeItem("open_edit_modal_for_guard");
+          sessionStorage.removeItem("open_edit_modal_for_date");
+          
+          // Remove highlight after 5 seconds
+          setTimeout(() => setHighlightedRecordId(null), 5000);
+        } else {
+          // If the admin approved a request but there is no attendance record for that date yet,
+          // open the manual entry modal pre-filled with the guard and date
+          setNewEntryData({
+            guard_id: editGuardId,
+            date: editDate,
+            duty_location_id: "",
+            check_in_time: "",
+            check_out_time: "",
+            status: "Present"
+          });
+          setShowManualEntry(true);
+          sessionStorage.removeItem("open_edit_modal_for_guard");
+          sessionStorage.removeItem("open_edit_modal_for_date");
+        }
+      }
+    }
+  }, [records]);
 
   function clearError(field) { setErrors((p) => ({ ...p, [field]: "" })); }
 
@@ -593,79 +650,6 @@ function Attendance({ role, userGuardId, hideHistory }) {
 
       <div className="mt-2">
 
-        <div className="glass-card rounded-2xl p-6 mb-8 ring-1 ring-indigo-200 relative z-50">
-          <h2 className="text-xl font-semibold mb-4 text-gray-700">
-            {isOnDuty ? "🟢 On Duty — Check Out" : "📋 Check In"}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">Guard</label>
-              <CustomSelect
-                value={guardId}
-                onChange={val => { setGuardId(val); clearError("guardId"); }}
-                options={[
-                  { value: "", label: "Select Guard" },
-                  ...guards.map(g => ({ value: String(g.id), label: g.name }))
-                ]}
-                placeholder="Select Guard"
-                error={!!errors.guardId}
-                heightClass="h-12"
-              />
-              {errors.guardId && <p className="text-red-500 text-sm mt-1">{errors.guardId}</p>}
-            </div>
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">Duty Location</label>
-              <CustomSelect
-                value={dutyLocationId}
-                onChange={val => setDutyLocationId(val)}
-                options={[
-                  { value: "", label: "Select Location" },
-                  ...locations.map(l => ({ value: String(l.id), label: `${l.place_name} (${l.radius_meters}m)` }))
-                ]}
-                placeholder="Select Location"
-                heightClass="h-12"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">Status</label>
-              <CustomSelect
-                value={status}
-                onChange={val => handleStatusChange(val)}
-                options={[
-                  { value: "Present", label: "Present" },
-                  { value: "Absent", label: "Absent" },
-                  { value: "Leave", label: "Leave" }
-                ]}
-                placeholder="Select Status"
-                heightClass="h-12"
-              />
-            </div>
-            <div className="flex items-end gap-2">
-              {isOnDuty ? (
-                <button onClick={handleCheckOut} disabled={loading}
-                  className={`w-full h-12 rounded-lg text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-orange-600 hover:bg-orange-700"}`}>
-                  {loading ? "Processing..." : "📸 End Duty"}
-                </button>
-              ) : hasGuardCheckedOutToday(records, guardId) ? (
-                <button disabled
-                  className="w-full h-12 rounded-lg text-white font-semibold bg-gray-400 cursor-not-allowed transition">
-                  ✅ Duty Completed
-                </button>
-              ) : (
-                <button onClick={handleCheckIn} disabled={loading || isAbsent}
-                  className={`w-full h-12 rounded-lg text-white font-semibold transition ${loading || isAbsent ? "bg-gray-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}>
-                  {loading ? "Processing..." : "📍 Start Duty"}
-                </button>
-              )}
-            </div>
-          </div>
-          {gpsStatus && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${gpsStatus.includes("m away") || gpsStatus.includes("outside") ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
-              {gpsStatus}
-            </div>
-          )}
-        </div>
-
       {showCalendarModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 perspective" style={{ perspective: '1200px' }}>
           <div 
@@ -694,6 +678,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                   options={guards.map(g => ({ value: String(g.id), label: g.name }))}
                   placeholder="Select Guard"
                   heightClass="h-10"
+                  searchable={true}
                 />
               </div>
               
@@ -756,11 +741,16 @@ function Attendance({ role, userGuardId, hideHistory }) {
                   <div className="bg-gray-50 p-3 rounded-2xl">
                     <div className="flex justify-between items-center mb-1.5">
                       <span className="font-bold text-gray-800">{dateKey}</span>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${sel.status === 'Present' || sel.status === 'On Duty' ? 'bg-green-200 text-green-800' : sel.status === 'Leave' || sel.status === 'Half Day' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'}`}>
-                        {sel.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => { setShowCalendarModal(false); startEdit(sel); }} className="text-gray-400 hover:text-blue-600 transition text-sm" title="Edit Record">
+                          ✏️
+                        </button>
+                        <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${sel.status === 'Present' || sel.status === 'On Duty' ? 'bg-green-200 text-green-800' : sel.status === 'Leave' || sel.status === 'Half Day' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'}`}>
+                          {sel.status}
+                        </span>
+                      </div>
                     </div>
-                    {sel.status === "Present" || sel.status === "On Duty" ? (
+                    {sel.status !== "Leave" ? (
                       <div className="space-y-1">
                         <p className="text-xs text-gray-600"><span className="font-semibold w-16 inline-block">Check In:</span> {sel.check_in_time ? new Date(sel.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
                         <p className="text-xs text-gray-600"><span className="font-semibold w-16 inline-block">Check Out:</span> {sel.check_out_time ? new Date(sel.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
@@ -768,9 +758,6 @@ function Attendance({ role, userGuardId, hideHistory }) {
                     ) : (
                       <p className="text-xs text-gray-500 italic">Time records not applicable</p>
                     )}
-                    <button onClick={() => { setShowCalendarModal(false); startEdit(sel); }} className="mt-3 text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-wide">
-                      ✏️ Edit Record
-                    </button>
                   </div>
                 );
               })() : (
@@ -873,6 +860,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
               options={guards.map(g => ({ value: String(g.id), label: g.name }))}
               placeholder="Select Guard"
               heightClass="h-11"
+              searchable={true}
             />
             
             <label className="block text-xs font-semibold text-gray-500 mt-3 mb-1">Location</label>
@@ -882,6 +870,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
               options={locations.map(l => ({ value: String(l.id), label: l.place_name }))}
               placeholder="Select Location"
               heightClass="h-11"
+              searchable={true}
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 mb-4">
@@ -919,7 +908,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
 
         {!hideHistory && (
           <div className="space-y-4 mt-6">
-            <div className="glass-card rounded-2xl overflow-visible shadow-sm ring-1 ring-gray-200 bg-white">
+            <div className="glass-card rounded-2xl overflow-visible shadow-sm ring-1 ring-gray-200 bg-white relative z-30">
               <div className="px-6 py-5 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/30 rounded-t-2xl">
                 <div>
                   <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">📋 Attendance History</h3>
@@ -945,9 +934,24 @@ function Attendance({ role, userGuardId, hideHistory }) {
                   <button onClick={() => setShowFiltersModal(true)} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
                     🔍 Filter
                   </button>
-                  <button onClick={downloadReportCSV} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
-                    ⬇️ Download
-                  </button>
+                  <div className="relative">
+                    <button onClick={() => setShowDownloadMenu(!showDownloadMenu)} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
+                      ⬇️ Download ▾
+                    </button>
+                    {showDownloadMenu && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowDownloadMenu(false)}></div>
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50">
+                          <button onClick={() => { setShowDownloadMenu(false); downloadReportCSV(); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition">
+                            <span className="text-blue-600">📄</span> Export CSV
+                          </button>
+                          <button onClick={() => { setShowDownloadMenu(false); printReport(); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition">
+                            <span className="text-purple-600">🖨️</span> Print Report
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -976,6 +980,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                           ...guards.map(g => ({ value: String(g.id), label: g.name }))
                         ]}
                         placeholder="All Guards"
+                        searchable={true}
                       />
                     </div>
                     <div>
@@ -988,6 +993,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                           ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
                         ]}
                         placeholder="All Locations"
+                        searchable={true}
                       />
                     </div>
                     <div>
@@ -1066,19 +1072,27 @@ function Attendance({ role, userGuardId, hideHistory }) {
                       <th className="text-left p-4 text-gray-600 font-semibold">Check Out</th>
                       <th className="text-left p-4 text-gray-600 font-semibold">Status</th>
                       <th className="text-left p-4 text-gray-600 font-semibold">Photo</th>
-                      {role === "admin" && <th className="text-center p-4 text-gray-600 font-semibold w-24">Action</th>}
+                      {role !== "guard" && <th className="text-center p-4 text-gray-600 font-semibold w-24">Action</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedRecords.length === 0 ? (
                       <tr><td colSpan={role === "admin" ? 8 : 7} className="p-8 text-center text-gray-400">No attendance records matching the filters.</td></tr>
                     ) : paginatedRecords.map((item) => (
-                      <tr key={item.id} className="border-b hover:bg-gray-50 transition">
-                        <td className="p-4 font-medium">{item.guards?.name}</td>
+                      <tr key={item.id} className={`border-b hover:bg-gray-50 transition ${highlightedRecordId === item.id ? "bg-amber-50/70 ring-2 ring-amber-300 ring-inset" : ""}`}>
+                        <td className="p-4 font-medium">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">
+                              {item.guards?.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="truncate max-w-[120px]" title={item.guards?.name}>{item.guards?.name}</span>
+                          </div>
+                        </td>
                         <td className="p-4 text-gray-500">{item.check_in_time?.split("T")[0] || item.date}</td>
                         <td className="p-4 text-gray-500 text-sm">{item.duty_locations?.place_name || "—"}</td>
                         <td className="p-4">
                           {(() => {
+                            if (item.status === "Leave") return "—";
                             const timeStr = item.check_in_time ? new Date(item.check_in_time).toLocaleTimeString() : item.check_in || "—";
                             if (role !== "guard") {
                               const lateMins = getLateMinutes(item);
@@ -1096,7 +1110,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                             return timeStr;
                           })()}
                         </td>
-                        <td className="p-4">{item.check_out_time ? new Date(item.check_out_time).toLocaleTimeString() : item.check_out || "—"}</td>
+                        <td className="p-4">{item.status === "Leave" ? "—" : (item.check_out_time ? new Date(item.check_out_time).toLocaleTimeString() : item.check_out || "—")}</td>
                         <td className="p-4">
                           {(() => {
                             let displayStatus = item.status;
@@ -1141,15 +1155,24 @@ function Attendance({ role, userGuardId, hideHistory }) {
                             {!item.check_in_photo && !item.check_out_photo ? "—" : null}
                           </div>
                         </td>
-                        {role === "admin" && (
+                        {role !== "guard" && (
                           <td className="p-4 text-center">
-                            <button
-                              onClick={() => deleteAttendanceRecord(item.id)}
-                              className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1.5 rounded-xl text-xs font-bold transition"
-                              title="Delete Record"
-                            >
-                              🗑️ Delete
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => openEditModal(item)}
+                                className="text-orange-500 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 p-2 rounded-full transition"
+                                title="Edit Record"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => deleteAttendanceRecord(item.id)}
+                                className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-full transition"
+                                title="Delete Record"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -1164,11 +1187,16 @@ function Attendance({ role, userGuardId, hideHistory }) {
                   <div className="p-8 text-center text-gray-400">No attendance records matching the filters.</div>
                 ) : (
                   paginatedRecords.map((item) => (
-                    <div key={item.id} className="p-4 space-y-3">
+                    <div key={item.id} className={`p-4 space-y-3 ${highlightedRecordId === item.id ? "bg-amber-50/70 ring-2 ring-amber-300 ring-inset" : ""}`}>
                       <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-gray-805 text-sm">{item.guards?.name || "Unknown"}</h4>
-                          <p className="text-xs text-gray-400 mt-0.5">{item.check_in_time?.split("T")[0] || item.date}</p>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold shrink-0">
+                            {item.guards?.name?.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-805 text-sm">{item.guards?.name || "Unknown"}</h4>
+                            <p className="text-xs text-gray-400 mt-0.5">{item.check_in_time?.split("T")[0] || item.date}</p>
+                          </div>
                         </div>
                         {(() => {
                           let displayStatus = item.status;
@@ -1211,6 +1239,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                         <div>
                           <span className="font-semibold block text-gray-450">Check In:</span>
                           {(() => {
+                            if (item.status === "Leave") return "—";
                             const timeStr = item.check_in_time ? new Date(item.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : item.check_in || "—";
                             if (role !== "guard") {
                               const lateMins = getLateMinutes(item);
@@ -1230,7 +1259,7 @@ function Attendance({ role, userGuardId, hideHistory }) {
                         </div>
                         <div>
                           <span className="font-semibold block text-gray-450">Check Out:</span>
-                          {item.check_out_time ? new Date(item.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : item.check_out || "—"}
+                          {item.status === "Leave" ? "—" : (item.check_out_time ? new Date(item.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : item.check_out || "—")}
                         </div>
                         <div>
                           <span className="font-semibold block text-gray-450">Photos:</span>
@@ -1246,13 +1275,21 @@ function Attendance({ role, userGuardId, hideHistory }) {
                         </div>
                       </div>
 
-                      {role === "admin" && (
-                        <div className="flex justify-end pt-1">
+                      {role !== "guard" && (
+                        <div className="flex justify-end gap-2 pt-2 border-t border-gray-50 mt-1">
+                          <button
+                            onClick={() => openEditModal(item)}
+                            className="text-orange-500 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 p-2 rounded-full transition"
+                            title="Edit Record"
+                          >
+                            ✏️
+                          </button>
                           <button
                             onClick={() => deleteAttendanceRecord(item.id)}
-                            className="bg-red-50 text-red-650 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                            className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-full transition"
+                            title="Delete Record"
                           >
-                            🗑️ Delete Record
+                            🗑️
                           </button>
                         </div>
                       )}

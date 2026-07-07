@@ -9,93 +9,65 @@ Welcome to **SecureSys**, the premier enterprise-grade security management platf
 
 ### Accessing the Platform
 You can access the SecureSys platform from any device (Desktop, Tablet, or Mobile) using your dedicated web link. 
-* **URL:** *(Insert your Vercel URL here)*
 * **Best Experience:** We recommend using a desktop browser for Administrators, and a mobile browser for Security Guards.
 
 ### How to Log In
-**Logging into SecureSys**
-
-**Navigate to Login Page:** Open your web browser and go to the SecureSys login URL.
-
-**Enter Credentials:** Input your assigned **Email** and **Password** into the respective fields.
-
-**Sign In:** Click the **Sign In** button. 
-*(Note: The system automatically detects whether you are an Administrator or a Guard based on your credentials and routes you to the appropriate dashboard).*
+1. **Navigate to Login Page:** Open your web browser and go to the SecureSys login URL.
+2. **Enter Credentials:** Input your assigned **Email** and **Password** into the respective fields.
+3. **Sign In:** Click the **Sign In** button. 
+*(Note: The system automatically detects whether you are an Administrator, Guard, or Platform Owner based on your credentials and routes you to the appropriate dashboard).*
 
 ---
 
 ## 2. Administrator Guide (Desktop Dashboard)
 
-As an Admin, you have full control over the facilities, guards, and live tracking.
+As a Company Admin, you have full control over your facilities, guards, scheduling, and live tracking.
 
 ### 📊 Summary Dashboard
 Upon logging in, you will see the **Dashboard**. This gives you a bird's-eye view of your entire operation:
 * **Total Guards & Active Guards:** See how many staff members are registered and currently on-shift.
-* **Performance Overview:** Track weekly attendance and incident reports via interactive charts.
+* **Performance Overview:** Track weekly attendance, shifts, and incident reports via interactive charts.
 * **Recent Activity:** View a live feed of the latest system actions (e.g., new guards added, SOS alerts triggered).
 
+### 📈 Advanced Analytics
+Gain deep insights into your operations through the **Analytics** module.
+* **Performance:** Review individual guard performance, on-time rates, and total hours worked.
+* **Patrols & Attendance:** View comprehensive charts breaking down daily attendance numbers and patrol completion rates.
+* **Incidents Mapping:** Visualize incident hotspots and trends over time to identify high-risk areas.
+
 ### 👥 Staff Registry
-This is where you manage your security personnel.
+This is where you manage your security personnel and sites.
+* **Adding a Guard Profile:** Go to "Staff Registry" > "Guard Profiles". Click **Add Guard**, fill in their details (Name, Email, Password, Assigned Location), and click **Save**.
+* **Managing Duty Locations (Geofencing):** Go to "Duty Locations". Click **Add Location** to specify a site name, map coordinates, and an allowed GPS radius (e.g., 100 meters). Guards can only clock in when physically inside this radius.
+* **System Access:** Manage login credentials and platform roles (e.g., Supervisor, Admin) for your management team.
 
-* **Adding a Guard:** 
-  
-  **Creating a New Guard Profile**
-  
-  **Navigate to Guard Profiles:** Click on the "Staff Registry" tab from the main menu, then select "Guard Profiles".
-  
-  **Add Guard:** Click the **Add Guard** button.
-  
-  **Fill Details:** Enter the required details for the new guard, including their Name, Email, Password, and Assigned Location.
-  
-  **Save Profile:** Click the **Save** button. The guard can immediately use these credentials to log in.
-
-* **Managing Locations (Geofencing):** Go to the "Duty Locations" tab. Here you can set up specific sites (e.g., "Main Gate", "Warehouse").
-  
-  **Adding a Duty Location in SecureSys**
-  
-  **Navigate to Duty Locations:** Click on the "Staff Registry" tab from the main menu, then select the "Duty Locations" sub-tab.
-  
-  **Add New Location:** Click the **Add Location** button. A form or dialog will open where you can specify:
-  
-  * **Location Name:** Give the site a specific name (e.g., "Main Gate", "Warehouse A").
-  * **Coordinates/Address:** Enter the physical address or pinpoint the exact location on the map.
-  * **Geofence Radius:** Select the allowed GPS radius (e.g., 50 meters, 100 meters) around the location to ensure guards can only clock in when physically present.
-  * **Status:** Select whether the location is currently active or inactive.
-  
-  **Save Location:** Click the **Save** button to finalize. The new duty location will now be available when assigning guards.
+### 📅 Shifts & Rostering
+Efficiently schedule your guards across different locations.
+* **Assigning Shifts:** Go to the **Shifts** tab. Select a Guard, a Duty Location, the Date, and the Start/End times.
+* **Shift Calendar:** View a monthly or weekly calendar layout to see all upcoming shifts and identify any coverage gaps.
 
 ### 🗺️ Live Operations & Tracking Map
 Monitor your active guards in real-time.
+* **View Map:** The interactive map displays live GPS pins of all active guards currently on duty. Locations automatically update every 5 minutes.
+* **Refresh Location:** Click **"Ping Now"** on a specific guard's profile card to instantly refresh and fetch their exact current location.
 
-**Tracking Guard Locations**
-
-**Navigate to Live Tracking:** Click on the **Live Tracking** tab from the main menu.
-
-**View Map:** The interactive map will load and display live GPS pins of all active guards currently on duty. Guard locations automatically update every 5 minutes.
-
-**Refresh Location:** Click **"Ping Now"** on a specific guard's profile card to instantly refresh and fetch their exact current location.
-
-### 📋 Attendance & Shift Logs
-Review detailed records of guard shifts.
-
-**Reviewing Shift Logs and Correction Requests**
-
-**Navigate to Attendance:** Click on the **Attendance & Shift Logs** tab.
-
-**View Records:** Browse the list to see detailed records of when guards Checked In and Checked Out.
-
-**Review Correction Requests:** Look for entries marked as Correction Requests (e.g., if a guard forgot to clock out). Click on the request to listen to the submitted audio note explaining the situation and approve or deny the correction.
+### 📋 Attendance & Correction Requests
+Review detailed records of guard shifts and manage exceptions.
+* **Attendance Logs:** Browse detailed records of Check-In and Check-Out times, complete with selfie verifications and GPS coordinates.
+* **Correction & Leave Requests:** Guards can submit requests if they forgot to clock out or need to apply for Leave. You can listen to their submitted **voice notes**, review the dates, and click **Approve** or **Reject**.
 
 ### 🚨 Incident Reports
 Review all workplace issues reported by guards from the field.
+* **Review Details:** Read text descriptions, view uploaded photo evidence, and play any attached **audio voice notes**. Incidents can be marked as "Open" or "Resolved".
 
-**Reviewing an Incident Report**
+### 📢 Circulars & Notifications
+Keep your team informed.
+* **Circulars:** Go to the **Circulars** tab and draft a new announcement. Once published, it will instantly appear on the mobile dashboard of every guard in your company.
+* **Notifications:** Check the bell icon in the top right for real-time alerts regarding SOS triggers, new correction requests, and system updates.
 
-**Navigate to Incidents:** Click on the **Incident Reports** tab.
-
-**Select Report:** Click on a specific incident from the list to view its details.
-
-**Review Details:** Read the text description, view the uploaded photo evidence, and click the play button to listen to any attached **audio voice notes**. The exact time and guard's name will also be displayed.
+### 💳 Billing & Subscriptions
+Manage your SaaS subscription and expand your workforce capacity.
+* **Purchase Seats:** Go to the **Billing** tab to securely add your credit card via eWAY and purchase additional Guard Seats to grow your team.
 
 ---
 
@@ -103,66 +75,46 @@ Review all workplace issues reported by guards from the field.
 
 The mobile view is highly optimized for guards in the field, ensuring they can perform their duties with zero friction.
 
-### Starting a Shift (Check-In)
-**Clocking In for Duty**
-
-**Log In:** Log in to the mobile app using your Guard credentials.
-
-**Navigate to Shift Control:** Go to the **Shift Control** tab on the bottom navigation bar.
-
-**Verify Location:** Wait a moment as your current location is automatically verified against the site's GPS Geofence.
-
-**Start Shift:** Once verified, click the **Start Shift** button. The system will log your exact time and location.
+### ⏱️ Starting a Shift (Check-In)
+1. **Log In:** Open the app and log in.
+2. **Navigate to Guard Duty:** Go to the **Shift Control** tab on the bottom navigation bar.
+3. **Verify Location:** Wait a moment as your current location is automatically verified against the site's GPS Geofence.
+4. **Start Shift:** Once verified, tap **Start Shift**. The system will log your exact time, location, and optionally ask for a selfie.
 
 ### 🆘 Emergency SOS Alert
-In case of an emergency, guards have access to an SOS button.
+In case of an emergency, guards have access to an instant alert system.
+* **Trigger Alert:** Tap the red **Emergency SOS** button on the home screen. The system immediately flags your status in the Admin dashboard and logs an emergency timestamp.
 
-**Triggering an SOS Alert**
-
-**Locate SOS Button:** Find the red **Emergency SOS Alert** button prominently displayed on the home screen.
-
-**Trigger Alert:** Tap the button.
-
-**Confirmation:** The system immediately flags your status in the Admin dashboard and logs an emergency timestamp.
-
-### Reporting Incidents & Issues
-If a guard spots a security breach, damage, or hazard:
-
-**Submitting an Incident Report**
-
-**Navigate to Incidents:** Go to the **Incidents** tab from the bottom menu.
-
-**Select Incident Type:** Choose the appropriate category for the issue (e.g., Security Breach, Maintenance).
-
-**Provide Details:** Type a brief text description of the issue.
-
-**Add Media:** Tap the camera icon to **upload a photo**, or tap the microphone icon to **record an audio voice note**.
-
-**Submit:** Click the **Submit** button. The report instantly appears on the Admin's dashboard.
+### 📝 Reporting Incidents & Leave
+* **Incident Reports:** Go to the **Incidents** tab. Choose an issue category, type a description, upload a photo, or **record an audio voice note**, then tap Submit.
+* **Leave Requests:** If you need time off or forgot to clock out, submit a **Correction Request**. You can record a voice note explaining the reason, and your Admin can approve it remotely.
 
 ### 🌐 Multi-Language Support
 Guards can easily switch the app's language to their native tongue. 
-
-**Changing the App Language**
-
-**Open Language Menu:** Tap the globe icon located in the top header of the app.
-
-**Select Language:** Choose your preferred language from the available list (English, Hindi, Arabic, Tamil, etc.).
-
-**Apply:** All menus and buttons will instantly translate to the selected language.
+* **Change Language:** Tap the globe icon in the top header. Choose your preferred language (English, Hindi, Arabic, Tamil, etc.). All menus and buttons will instantly translate.
 
 ---
 
-## 4. Support & Settings
-If you encounter any issues or need to reset system cache:
+## 4. Platform Owner Guide (Super Admin)
 
-**Clearing System Cache (Admin Only)**
+If you are the Platform Owner, you have access to a global top-level dashboard to manage the entire SaaS ecosystem.
 
-**Navigate to Settings:** Click on the **Settings** menu from the admin dashboard.
+### 🏢 Tenant Management
+* **View Companies:** See a list of all organizations registered on your platform, their active guard counts, and their subscription status.
+* **Company Deep Dive:** Click on any company to drill down into their specific usage metrics, active guards, and billing history.
 
-**Select Cache Option:** Find the section for system maintenance and click on the option to clear temporary storage or clean up old audio notes.
+### 🌍 Global Controls
+* **Platform Settings:** Customize the look and feel of your SaaS. You can change the primary brand color, update the platform name, and upload a new logo.
+* **Global Broadcasts:** Send urgent messages or scheduled maintenance alerts that will appear across all companies and all users simultaneously.
 
-**Confirm:** Confirm the action to free up database space. For further technical assistance, contact your IT administrator.
+---
+
+## 5. Support & Settings
+
+### ⚙️ System Settings & Audio Settings (Admin Only)
+* **Voice Options:** Configure the text-to-speech voice used for the automated tour guide.
+* **Clear Storage:** You can clear temporary storage photos, delete old voice notes, or safely clear historical data to free up database space.
+* **Tech Support:** If you encounter bugs or database errors, contact your IT administrator for support.
 
 ---
 *Generated for SecureSys Platform*

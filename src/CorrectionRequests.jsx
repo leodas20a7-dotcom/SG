@@ -76,7 +76,7 @@ function CorrectionRequests({ role, companyId, guardId, onNavigate }) {
     try {
       const { data: reqData } = await supabase
         .from("attendance_requests")
-        .select("guard_id, request_type, message, start_date, end_date")
+        .select("guard_id, request_type, message, start_date, end_date, created_at")
         .eq("id", id)
         .single();
 
@@ -170,6 +170,7 @@ function CorrectionRequests({ role, companyId, guardId, onNavigate }) {
         sessionStorage.setItem("liveops_view", "checkin");
         if (reqData?.request_type !== "leave") {
           sessionStorage.setItem("open_edit_modal_for_guard", reqData.guard_id);
+          sessionStorage.setItem("open_edit_modal_for_date", reqData.target_date || (reqData.created_at ? reqData.created_at.split('T')[0] : ""));
         }
         onNavigate("live-ops");
       }
@@ -245,11 +246,11 @@ function CorrectionRequests({ role, companyId, guardId, onNavigate }) {
                     <tr key={req.id} className="border-b hover:bg-gray-50 transition">
                       {["admin", "super_admin"].includes(role) && <td className="p-4 font-medium">{req.guards?.name}</td>}
                       <td className="p-4">
-                        <span className={`px-2 py-1 text-xs rounded-md font-semibold capitalize ${
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded-md font-semibold capitalize ${
                           req.request_type === "leave" ? "bg-amber-100 text-amber-700" :
                           req.request_type === "voice" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
                         }`}>
-                          {req.request_type === "leave" ? <span className="flex items-center gap-1.5 justify-center"><FaCalendarDay /> Leave</span> :
+                          {req.request_type === "leave" ? <><FaCalendarDay /> Leave</> :
                            req.request_type === "voice" ? "🎤 Voice" : "📝 Text"}
                         </span>
                       </td>
@@ -333,11 +334,11 @@ function CorrectionRequests({ role, companyId, guardId, onNavigate }) {
                   <div className="text-xs text-gray-700 bg-gray-50 p-3 rounded-xl space-y-2">
                     <div>
                       <span className="font-semibold block text-gray-400 text-[10px] uppercase">Type:</span>
-                      <span className={`inline-block px-2 py-0.5 text-[10px] rounded font-semibold capitalize ${
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] rounded font-semibold capitalize ${
                         req.request_type === "leave" ? "bg-amber-100 text-amber-700" :
                         req.request_type === "voice" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
                       }`}>
-                        {req.request_type === "leave" ? <span className="flex items-center gap-1.5"><FaCalendarDay /> Leave Request</span> :
+                        {req.request_type === "leave" ? <><FaCalendarDay /> Leave Request</> :
                          req.request_type === "voice" ? "🎤 Voice Request" : "📝 Text Request"}
                       </span>
                     </div>

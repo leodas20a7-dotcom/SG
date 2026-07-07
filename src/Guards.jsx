@@ -517,7 +517,7 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
 
 
       showToast("Guard added successfully!", "success");
-      
+
       if (email.trim() && password) {
         setNewGuardCredentials({
           name: name.trim(),
@@ -580,10 +580,10 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
   /* ── update guard ── */
   async function updateGuard() {
     if (!validate()) return;
-    
+
     try {
       const { data: currentGuard } = await supabase.from("guards").select("*").eq("id", editingId).single();
-      
+
       // Enforce billing limits if activating an inactive guard
       if (status === "Active" && currentGuard?.status !== "Active") {
         if (companyStatus === "past_due") {
@@ -768,6 +768,7 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
                     ...locations.map(l => ({ value: String(l.id), label: l.place_name }))
                   ]}
                   placeholder="None (Keep Primary Location)"
+                  searchable={true}
                 />
               </div>
 
@@ -1453,7 +1454,7 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
             <p className="text-gray-500 text-[11px] mb-5">
               Please save or send these login credentials to the guard.
             </p>
-            
+
             <div className="bg-gray-50/80 p-4 rounded-2xl text-left mb-6 border border-gray-100 shadow-sm">
               <div className="mb-3">
                 <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Email</span>
@@ -1475,9 +1476,9 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
               >
                 <FaCopy /> Copy
               </button>
-              
+
               <a
-                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${newGuardCredentials.email}&su=Login Credentials for SecureSys&body=Hi ${newGuardCredentials.name},%0D%0A%0D%0AHere are your login credentials for SecureSys:%0D%0A%0D%0AEmail: ${newGuardCredentials.email}%0D%0APassword: ${newGuardCredentials.password}%0D%0A%0D%0APlease keep these safe and change your password upon first login.`}
+                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${newGuardCredentials.email}&su=Login Credentials for SecureSys&body=Hi ${newGuardCredentials.name},%0D%0A%0D%0AHere are your login credentials for SecureSys:%0D%0A%0D%0AEmail: ${newGuardCredentials.email}%0D%0APassword: ${newGuardCredentials.password}%0D%0A%0D%0APlease keep these safe.`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition shadow-md flex items-center justify-center gap-1.5 text-xs"

@@ -6,6 +6,7 @@ import Notifications from "./Notifications";
 import { useLanguage } from "./LanguageContext";
 import ErrorBoundary from "./ErrorBoundary";
 import DarkModeToggle from "./DarkModeToggle";
+import ConfirmModal from "./ConfirmModal";
 
 // Lazy-loaded subcomponents for improved performance and initial page load speed
 const StaffRegistry = React.lazy(() => import("./StaffRegistry"));
@@ -92,6 +93,7 @@ function LanguageDropdown({ locale, setLocale }) {
 function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigate }) {
 
   const { t, locale, setLocale } = useLanguage();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Ensure user has permission for the current page, redirect if not
   useEffect(() => {
@@ -578,7 +580,11 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
     }
   }
 
-  async function handleLogout() {
+  function handleLogout() {
+    setShowLogoutConfirm(true);
+  }
+
+  async function confirmLogout() {
     try {
       await supabase.auth.signOut();
       window.location.reload();
@@ -596,6 +602,14 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
         <div className="glowing-orb-2" />
 
         <Sidebar role={role} page={page} onNavigate={onNavigate} onLogout={handleLogout} isOpen={sidebarOpen} onOpen={() => setSidebarOpen(true)} onClose={() => setSidebarOpen(false)} allowedPages={allowedPages} />
+
+        {showLogoutConfirm && (
+          <ConfirmModal
+            message="Are you sure you want to log out?"
+            onConfirm={confirmLogout}
+            onCancel={() => setShowLogoutConfirm(false)}
+          />
+        )}
 
         <div className="flex-1 p-4 md:p-8 overflow-y-auto h-full relative z-10">
           

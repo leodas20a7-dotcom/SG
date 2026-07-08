@@ -13,7 +13,7 @@ function Signup({ setSession, onNavigateToLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  const [timezone, setTimezone] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const TIMEZONES = [
     { label: "United States (New York)", value: "America/New_York" },
@@ -107,8 +107,13 @@ function Signup({ setSession, onNavigateToLogin }) {
     } else if (password.length < 6) {
       errs.password = "Password must be at least 6 characters";
     }
-    if (password !== confirmPassword) {
+    if (!confirmPassword) {
+      errs.confirmPassword = "Confirm password is required";
+    } else if (password !== confirmPassword) {
       errs.confirmPassword = "Passwords do not match";
+    }
+    if (!timezone) {
+      errs.timezone = "Region / Time Zone is required";
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -296,6 +301,7 @@ function Signup({ setSession, onNavigateToLogin }) {
                   </div>
                   <input
                     type="text"
+                    required
                     placeholder="Enter your security agency name"
                     className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-4 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.agencyName ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500/10"
                       }`}
@@ -315,6 +321,7 @@ function Signup({ setSession, onNavigateToLogin }) {
                   </div>
                   <input
                     type="email"
+                    required
                     placeholder="enter your email"
                     className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-4 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.email ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500/10"
                       }`}
@@ -334,6 +341,7 @@ function Signup({ setSession, onNavigateToLogin }) {
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
+                    required
                     placeholder="password"
                     className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-12 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.password ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500/10"
                       }`}
@@ -360,6 +368,7 @@ function Signup({ setSession, onNavigateToLogin }) {
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
+                    required
                     placeholder="confirm password"
                     className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-12 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.confirmPassword ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500/10"
                       }`}
@@ -376,14 +385,15 @@ function Signup({ setSession, onNavigateToLogin }) {
                 <div className="relative">
                   <CustomSelect
                     value={timezone}
-                    onChange={(val) => setTimezone(val)}
+                    onChange={(val) => { setTimezone(val); setErrors((prev) => ({ ...prev, timezone: "" })); }}
                     options={TIMEZONES}
                     placeholder="Search country..."
                     searchable={true}
                     heightClass="h-11 md:h-12"
-                    className="w-full text-sm"
+                    className={`w-full text-sm ${errors.timezone ? "border border-red-300 rounded-xl" : ""}`}
                   />
                 </div>
+                {errors.timezone && <p className="text-red-500 text-xs font-medium mt-1">{errors.timezone}</p>}
               </div>
 
 

@@ -11,6 +11,7 @@ function Login({ setSession, onNavigateToSignup }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isMobileFormCollapsed, setIsMobileFormCollapsed] = useState(false);
@@ -88,8 +89,44 @@ function Login({ setSession, onNavigateToSignup }) {
     }
   }
 
+  async function handleResetPassword() {
+    if (!email.trim()) {
+      setErrors({ email: "Email is required for password reset" });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErrors({ email: "Please enter a valid email address" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+
+      if (error) {
+        showToast(error.message, "error");
+        return;
+      }
+
+      showToast("Password reset link sent! Check your email.", "success");
+      setIsResettingPassword(false);
+    } catch (err) {
+      showToast("Something went wrong. Please try again.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function handleKeyDown(e) {
-    if (e.key === "Enter") handleLogin();
+    if (e.key === "Enter") {
+      if (isResettingPassword) {
+        handleResetPassword();
+      } else {
+        handleLogin();
+      }
+    }
   }
 
   const appLogo = "/logo.png";
@@ -224,8 +261,12 @@ function Login({ setSession, onNavigateToSignup }) {
             {/* Mobile Logo Block - Removed because we display it above the card */}
 
             <div className="mb-8 md:mb-10 text-center shrink-0">
-              <h2 className="text-[28px] md:text-3xl font-extrabold text-[#1A1F2C] dark:text-white tracking-tight flex items-center justify-center gap-2 mb-2">Welcome Back <span className="inline-block">👋</span></h2>
-              <p className="text-gray-500 dark:text-slate-400 text-sm md:text-base font-medium">Please sign in to your account</p>
+              <h2 className="text-[28px] md:text-3xl font-extrabold text-[#1A1F2C] dark:text-white tracking-tight flex items-center justify-center gap-2 mb-2">
+                {isResettingPassword ? "Reset Password" : "Welcome Back"} <span className="inline-block">👋</span>
+              </h2>
+              <p className="text-gray-500 dark:text-slate-400 text-sm md:text-base font-medium">
+                {isResettingPassword ? "Enter your email to receive a reset link" : "Please sign in to your account"}
+              </p>
             </div>
 
             <div className="space-y-4 md:space-y-5">
@@ -237,6 +278,7 @@ function Login({ setSession, onNavigateToSignup }) {
                   </div>
                   <input
                     type="email"
+                    required
                     placeholder="enter your email"
                     className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-4 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.email ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
                       }`}
@@ -248,52 +290,65 @@ function Login({ setSession, onNavigateToSignup }) {
                 {errors.email && <p className="text-red-500 text-xs font-medium mt-1">{errors.email}</p>}
               </div>
 
-              <div>
-                <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 md:mb-2">Password</label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
-                    <FaLock />
+              {!isResettingPassword && (
+                <div>
+                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 md:mb-2">Password</label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
+                      <FaLock />
+                    </div>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      placeholder="password"
+                      className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-12 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.password ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
+                        }`}
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: "" })); }}
+                      onKeyDown={handleKeyDown}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition"
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </button>
                   </div>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="password"
-                    className={`w-full h-11 md:h-12 border rounded-xl pl-11 pr-12 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 transition-all ${errors.password ? "border-red-300 focus:ring-red-500/20" : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
-                      }`}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: "" })); }}
-                    onKeyDown={handleKeyDown}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition"
-                  >
-                    {showPassword ? <FaEyeSlash /> : <FaEye />}
-                  </button>
+                  {errors.password && <p className="text-red-500 text-xs font-medium mt-1">{errors.password}</p>}
+                  
+                  <div className="flex justify-end mt-2">
+                    <button type="button" onClick={() => setIsResettingPassword(true)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-semibold transition-colors">Forgot Password?</button>
+                  </div>
                 </div>
-                {errors.password && <p className="text-red-500 text-xs font-medium mt-1">{errors.password}</p>}
-              </div>
-
-
+              )}
 
               <div className="pt-2 md:pt-4">
                 <button
                   type="submit"
                   disabled={loading}
-                  onClick={handleLogin}
+                  onClick={isResettingPassword ? handleResetPassword : handleLogin}
                   className="w-full h-11 md:h-12 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-[0_10px_25px_-5px_rgba(79,70,229,0.5)] flex items-center justify-center gap-2 relative overflow-hidden group"
                 >
                   <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:animate-shine" />
-                  {loading ? "Signing in..." : "Sign In"}
+                  {loading ? (isResettingPassword ? "Sending..." : "Signing in...") : (isResettingPassword ? "Send Reset Link" : "Sign In")}
                 </button>
               </div>
 
               <div className="mt-6 md:mt-8 text-center text-xs md:text-sm">
-                <p className="text-gray-500 dark:text-slate-400 font-medium mb-1">Don't have an agency account yet?</p>
-                <button onClick={onNavigateToSignup} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-bold transition-all relative group inline-block py-1">
-                  Register here
-                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 group-hover:w-full transition-all duration-300"></span>
-                </button>
+                {isResettingPassword ? (
+                  <button onClick={() => setIsResettingPassword(false)} className="text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 font-medium transition-colors">
+                    Back to Login
+                  </button>
+                ) : (
+                  <>
+                    <p className="text-gray-500 dark:text-slate-400 font-medium mb-1">Don't have an agency account yet?</p>
+                    <button onClick={onNavigateToSignup} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-bold transition-all relative group inline-block py-1">
+                      Register here
+                      <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 group-hover:w-full transition-all duration-300"></span>
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="pt-6 md:pt-4 pb-4 md:pb-0 flex justify-center items-center gap-1.5 opacity-80 shrink-0">

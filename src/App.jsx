@@ -29,6 +29,7 @@ function App() {
   const [session, setSession] = useState(null);
   const [currentView, setCurrentView] = useState("login");
   const [history, setHistory] = useState([]);
+  const [showUpdatePasswordModal, setShowUpdatePasswordModal] = useState(false);
 
   const openPage = (nextPage) => {
     setHistory(prev => [...prev, currentView]);
@@ -249,6 +250,9 @@ Profile: ${JSON.stringify(profile)}`);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === "PASSWORD_RECOVERY") {
+        setShowUpdatePasswordModal(true);
+      }
       if (sessionStorage.getItem("ignore_auth_change") === "true") {
         return;
       }
@@ -432,11 +436,105 @@ Profile: ${JSON.stringify(profile)}`);
     );
   }
 
-
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
+      {showUpdatePasswordModal && (
+        <UpdatePasswordModal 
+          onClose={() => setShowUpdatePasswordModal(false)} 
+        />
+      )}
       <Dashboard role={role} userGuardId={guardId} companyId={companyId} allowedPages={allowedPages} page={currentView} onNavigate={openPage} />
     </ErrorBoundary>
+  );
+}
+
+function UpdatePasswordModal({ onClose }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  async function handleUpdate() {
+    setError("");
+    if (!newPassword || newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } catch (err) {
+      setError(err.message || "Failed to update password. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCancel() {
+    await supabase.auth.signOut();
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl relative animate-slide-up">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Update Password</h2>
+        <p className="text-gray-500 dark:text-slate-400 mb-6 text-sm">Please enter your new password below.</p>
+        
+        {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm">{error}</div>}
+        {success && <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-xl text-sm font-medium">Password updated successfully! Closing...</div>}
+
+        <div className="space-y-4 mb-8">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">New Password</label>
+            <input
+              type="password"
+              className="w-full h-11 border rounded-xl px-4 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-indigo-500 transition-all border-slate-200 dark:border-slate-700"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="minimum 6 characters"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              className="w-full h-11 border rounded-xl px-4 text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-indigo-500 transition-all border-slate-200 dark:border-slate-700"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="re-enter new password"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleCancel}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleUpdate}
+            disabled={loading || success}
+            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
+          >
+            {loading ? "Updating..." : "Save Password"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

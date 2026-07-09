@@ -328,7 +328,7 @@ function Settings({ onStartTour }) {
 
       {/* Details Popup Overlay Modal */}
       {activeDetailsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100/80 relative animate-scale-in">
             <button 
               onClick={() => setActiveDetailsModal(null)} 
@@ -591,7 +591,7 @@ function Settings({ onStartTour }) {
         </div>
 
         {/* Time Zone Configuration Card - Soft Indigo Tint */}
-        <div className="glass-card p-6 bg-[#F8F9FE] border border-indigo-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+        <div className="glass-card p-6 bg-[#F8F9FE] border border-indigo-100 shadow-[0_10px_30px_rgba(15,23,42,0.08)] relative z-50">
           <h2 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
             <span>🌍</span>
             <span>Organization Time Zone</span>

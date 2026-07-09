@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import { FaBuilding, FaUserShield, FaChartLine, FaCheckCircle, FaTimesCircle, FaEllipsisV, FaEdit, FaTrash, FaTimes, FaFilter, FaSearch } from 'react-icons/fa';
 import { useToast } from './Toast';
-import CompanyDeepDive from './CompanyDeepDive';
+
+const CompanyDeepDive = React.lazy(() => import('./CompanyDeepDive'));
 
 function TenantManagement() {
   const [companies, setCompanies] = useState([]);
@@ -131,7 +132,9 @@ function TenantManagement() {
   if (deepDiveCompany) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto">
-        <CompanyDeepDive company={deepDiveCompany} onBack={() => setDeepDiveCompany(null)} />
+        <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading...</div>}>
+          <CompanyDeepDive company={deepDiveCompany} onBack={() => setDeepDiveCompany(null)} />
+        </Suspense>
       </div>
     );
   }

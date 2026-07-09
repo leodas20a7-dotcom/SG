@@ -64,9 +64,60 @@ export function dataUrlToBlob(dataUrl) {
   return new Blob([u8], { type: mime });
 }
 
+export function compressImageToBlob(dataUrl, maxWidth = 400, maxHeight = 300, quality = 0.5) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = dataUrl;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Image compression failed"));
+          }
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = (err) => reject(err);
+  });
+}
+
 export async function uploadPhoto(guardId, dataUrl, supabase) {
   if (!dataUrl) throw new Error("No photo data. Camera may be unavailable.");
-  const blob = dataUrlToBlob(dataUrl);
+  
+  let blob;
+  try {
+    blob = await compressImageToBlob(dataUrl, 400, 300, 0.5);
+  } catch (e) {
+    console.warn("Compression failed, uploading original photo instead:", e);
+    blob = dataUrlToBlob(dataUrl);
+  }
+
   const fileName = `guard_${guardId}_${Date.now()}.jpg`;
   const { error: uploadErr } = await supabase.storage
     .from("guard-photos")

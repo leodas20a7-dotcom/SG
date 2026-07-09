@@ -65,7 +65,9 @@ function App() {
   }, []);
 
   const [role, setRole] = useState("");
-  const [allowedPages, setAllowedPages] = useState(null);
+  // undefined = still loading, null = loaded with no restriction, array = loaded with specific restrictions
+  const [allowedPages, setAllowedPages] = useState(undefined);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [guardId, setGuardId] = useState(null);
   const [guardName, setGuardName] = useState("");
   const [companyId, setCompanyId] = useState(null);
@@ -159,7 +161,8 @@ function App() {
 
       if (profile) {
         setRole(profile.role);
-        setAllowedPages(profile.allowed_pages || null);
+        // null means no restriction (full access), array means specific pages only
+        setAllowedPages(profile.allowed_pages && profile.allowed_pages.length > 0 ? profile.allowed_pages : null);
         setCompanyId(profile.company_id);
         
         // Check company subscription and timezone
@@ -188,6 +191,7 @@ function App() {
           if (guard) {
             setGuardId(guard.id);
             setGuardName(guard.name);
+            setRoleLoaded(true);
           } else {
             // Auto-heal: If the guard row is missing (e.g. race condition during signup), recreate it.
             const { data: newGuard, error: insErr } = await supabase.from("guards").insert([{
@@ -225,13 +229,16 @@ Profile: ${JSON.stringify(profile)}`);
             setCurrentView(startPage);
             setHistory([]);
         }
+        setRoleLoaded(true);
       } else {
         console.error("Profile not found for user", userId, error);
         setProfileError(true);
+        setRoleLoaded(true);
       }
     } catch (err) {
       alert("App.jsx crash inside fetchRole: " + err.message);
       console.error(err);
+      setRoleLoaded(true);
     } finally {
       setLoading(false);
     }
@@ -241,6 +248,9 @@ Profile: ${JSON.stringify(profile)}`);
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
+        // Reset before loading new user's permissions - prevents stale state leaking through
+        setRoleLoaded(false);
+        setAllowedPages(undefined);
         setLoading(true);
         fetchRole(session.user.id);
         checkPermissions();
@@ -258,6 +268,9 @@ Profile: ${JSON.stringify(profile)}`);
       }
       setSession(session);
       if (session?.user) {
+        // Reset before loading new user's permissions - prevents stale state leaking through
+        setRoleLoaded(false);
+        setAllowedPages(undefined);
         setLoading(true);
         fetchRole(session.user.id);
         checkPermissions();
@@ -433,6 +446,22 @@ Profile: ${JSON.stringify(profile)}`);
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <GuardDuty guardId={guardId} guardName={guardName} companyId={companyId} />
       </ErrorBoundary>
+    );
+  }
+
+  // Block rendering until role & allowedPages are fully fetched from the server
+  if (!roleLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(135deg, #f0f4ff 0%, #faf5ff 50%, #f0f9ff 100%)" }}>
+        <div className="text-center animate-fade-in">
+          <div className="flex items-center justify-center gap-1.5 mb-3">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+          <p className="text-gray-500 font-medium">Verifying permissions...</p>
+        </div>
+      </div>
     );
   }
 

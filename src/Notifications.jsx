@@ -71,7 +71,7 @@ function Notifications({ role, guardId, companyId, guardName, onNavigate }) {
           const { data: visibleCirculars } = await supabase
             .from("circulars")
             .select("title")
-            .or(`is_broadcast.eq.true,guard_id.eq.${guardId}`);
+            .eq("company_id", companyId);
 
           const allowedCircularTitles = new Set(visibleCirculars?.map(c => c.title) || []);
 

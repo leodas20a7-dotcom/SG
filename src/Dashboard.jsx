@@ -123,6 +123,16 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
     }
   }, [page, role, allowedPages, onNavigate]);
 
+  // Helper: double-check both role AND allowedPages before rendering any page component
+  function canAccess(pageKey) {
+    const navItem = ALL_NAV.find(n => n.key === pageKey);
+    if (!navItem) return false;
+    if (!navItem.roles.includes(role)) return false;
+    // If allowedPages is set (restricted user), verify the page is in the list
+    if (allowedPages && allowedPages.length > 0 && !allowedPages.includes(pageKey)) return false;
+    return true;
+  }
+
   // Sync page state to URL hash
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -696,7 +706,7 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
                 <span>Loading panel...</span>
               </div>
             }>
-              {page === "dashboard" && (
+              {page === "dashboard" && canAccess("dashboard") && (
                 <div className="tour-analytics-target w-full animate-fade-in">
                   {role === "platform_admin" ? (
                     <PlatformAdminDashboard />
@@ -714,12 +724,12 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
               {page === "global-broadcasts" && role === "platform_admin" && (
                 <GlobalBroadcasts />
               )}
-              {page === "live-ops" && (
+              {page === "live-ops" && canAccess("live-ops") && (
                 <div className="tour-liveops-target w-full">
                   <LiveOps role={role} companyId={companyId} tourView={tourStep !== null && tourSteps[tourStep]?.page === "live-ops" ? tourSteps[tourStep]?.tourView : null} />
                 </div>
               )}
-              {page === "staff-registry" && (role === "admin" || role === "super_admin") && (
+              {page === "staff-registry" && canAccess("staff-registry") && (
                 <div className="tour-staff-target w-full">
                   <StaffRegistry 
                     tourTab={tourStep !== null && tourSteps[tourStep]?.page === "staff-registry" ? tourSteps[tourStep]?.tourTab : null} 
@@ -728,14 +738,14 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
                   />
                 </div>
               )}
-              {page === "guard-profiles" && (role === "admin" || role === "supervisor" || role === "super_admin") && <GuardProfiles companyId={companyId} />}
-              {page === "shifts" && (role === "admin" || role === "supervisor" || role === "super_admin") && <div className="tour-shifts-target w-full"><Shifts companyId={companyId} onNavigate={onNavigate} /></div>}
-              {page === "system-users" && (role === "admin" || role === "super_admin") && <div className="tour-access-target w-full"><SystemAccess companyId={companyId} /></div>}
-              {page === "incidents" && <div className="tour-incidents-target w-full"><Incidents role={role} companyId={companyId} currentGuardId={userGuardId} /></div>}
-              {page === "circulars" && <div className="tour-circulars-target w-full"><Circulars role={role} userGuardId={userGuardId} companyId={companyId} /></div>}
-              {page === "correction-requests" && <div className="tour-requests-target w-full"><CorrectionRequests role={role} companyId={companyId} guardId={userGuardId} onNavigate={onNavigate} /></div>}
-              {page === "billing" && (role === "admin" || role === "super_admin") && <div className="tour-billing-target w-full"><Billing companyId={companyId} /></div>}
-              {page === "settings" && (role === "admin" || role === "super_admin") && <Settings onStartTour={() => setTourStep(0)} />}
+              {page === "guard-profiles" && canAccess("guard-profiles") && <GuardProfiles companyId={companyId} />}
+              {page === "shifts" && canAccess("shifts") && <div className="tour-shifts-target w-full"><Shifts companyId={companyId} onNavigate={onNavigate} /></div>}
+              {page === "system-users" && canAccess("system-users") && <div className="tour-access-target w-full"><SystemAccess companyId={companyId} /></div>}
+              {page === "incidents" && canAccess("incidents") && <div className="tour-incidents-target w-full"><Incidents role={role} companyId={companyId} currentGuardId={userGuardId} /></div>}
+              {page === "circulars" && canAccess("circulars") && <div className="tour-circulars-target w-full"><Circulars role={role} userGuardId={userGuardId} companyId={companyId} /></div>}
+              {page === "correction-requests" && canAccess("correction-requests") && <div className="tour-requests-target w-full"><CorrectionRequests role={role} companyId={companyId} guardId={userGuardId} onNavigate={onNavigate} /></div>}
+              {page === "billing" && canAccess("billing") && <div className="tour-billing-target w-full"><Billing companyId={companyId} /></div>}
+              {page === "settings" && canAccess("settings") && <Settings onStartTour={() => setTourStep(0)} />}
               {page === "settings" && role === "platform_admin" && <PlatformSettings />}
             </Suspense>
           </ErrorBoundary>

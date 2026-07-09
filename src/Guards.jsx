@@ -898,73 +898,86 @@ function Guards({ onGuardAdded, onNavigate, companyId }) {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs text-gray-450 font-bold uppercase tracking-wider">Guard Name</p>
-                <p className="text-lg font-bold text-gray-800">{selectedShiftGuard.name}</p>
-              </div>
+            <div className="space-y-5">
 
-              <div className="border-t border-gray-105 pt-3">
-                <p className="text-xs text-indigo-500 font-bold uppercase tracking-wider mb-1.5">Today's Active Assignment</p>
-                {(() => {
-                  const eff = effectiveLocation(selectedShiftGuard);
-                  const today = new Date().toISOString().split("T")[0];
-                  const hasTempShift = selectedShiftGuard.tempShifts && selectedShiftGuard.tempShifts.length > 0 &&
-                    selectedShiftGuard.temp_location_from && selectedShiftGuard.temp_location_to &&
-                    today >= selectedShiftGuard.temp_location_from && today <= selectedShiftGuard.temp_location_to;
-
-                  const activeShift = hasTempShift ? selectedShiftGuard.tempShifts[0] : selectedShiftGuard.constantShift;
-                  return (
-                    <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100/50">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-bold text-gray-805">{eff.name}</span>
-                        {eff.isTemp && (
-                          <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">TEMP OVERRIDE</span>
-                        )}
-                      </div>
-                      {activeShift ? (
-                        <p className="text-sm text-indigo-650 font-semibold">
-                          ⏰ {activeShift.shift_name} ({activeShift.start_time?.substring(0, 5) || "—"} - {activeShift.end_time?.substring(0, 5) || "—"})
-                        </p>
-                      ) : (
-                        <p className="text-sm text-gray-400">No shift assigned</p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 border-t border-gray-105 pt-3">
-                <div>
-                  <p className="text-xs text-gray-450 font-bold uppercase tracking-wider mb-1">Constant Schedule</p>
-                  <div className="bg-gray-50 rounded-xl p-3 text-sm">
-                    <p className="font-semibold text-gray-700">Location: {selectedShiftGuard.duty_location?.place_name || "—"}</p>
-                    {selectedShiftGuard.constantShift ? (
-                      <p className="text-gray-650">Shift: {selectedShiftGuard.constantShift.shift_name} ({selectedShiftGuard.constantShift.start_time?.substring(0, 5) || "—"} - {selectedShiftGuard.constantShift.end_time?.substring(0, 5) || "—"})</p>
-                    ) : (
-                      <p className="text-gray-400">No constant shift</p>
+              {/* Guard Identity Card */}
+              <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border border-indigo-100">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-md shadow-indigo-200 shrink-0">
+                  {selectedShiftGuard.name?.charAt(0)?.toUpperCase() || "G"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-lg font-extrabold text-slate-800 truncate">{selectedShiftGuard.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                      selectedShiftGuard.status === "Active"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-100 text-slate-500"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${selectedShiftGuard.status === "Active" ? "bg-emerald-500" : "bg-slate-400"}`} />
+                      {selectedShiftGuard.status || "Unknown"}
+                    </span>
+                    {selectedShiftGuard.site && (
+                      <span className="text-[11px] text-slate-500 font-medium">📍 {selectedShiftGuard.site}</span>
                     )}
                   </div>
                 </div>
+              </div>
 
-                {selectedShiftGuard.temp_location_from && selectedShiftGuard.temp_location_to && (
-                  <div>
-                    <p className="text-xs text-amber-700 font-bold uppercase tracking-wider mb-1">Temporary Override</p>
-                    <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-3 text-sm">
-                      <p className="font-semibold text-amber-800">Location: {selectedShiftGuard.temp_duty_location?.place_name || "—"}</p>
-                      {selectedShiftGuard.tempShifts && selectedShiftGuard.tempShifts.length > 0 ? (
-                        <p className="text-amber-705 text-xs">Shift: {selectedShiftGuard.tempShifts[0].shift_name} ({selectedShiftGuard.tempShifts[0].start_time?.substring(0, 5) || "—"} - {selectedShiftGuard.tempShifts[0].end_time?.substring(0, 5) || "—"})</p>
-                      ) : (
-                        <p className="text-amber-600 text-xs">No temporary shift</p>
-                      )}
-                      <p className="text-[11px] text-amber-600 font-medium mt-1">
-                        Validity: {selectedShiftGuard.temp_location_from} to {selectedShiftGuard.temp_location_to}
-                      </p>
-                    </div>
-                  </div>
+              {/* Contact & Info Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">📞 Phone</p>
+                  <p className="text-sm font-semibold text-slate-700 truncate">{selectedShiftGuard.phone || "—"}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">📅 Member Since</p>
+                  <p className="text-sm font-semibold text-slate-700">
+                    {selectedShiftGuard.created_at
+                      ? new Date(selectedShiftGuard.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—"}
+                  </p>
+                </div>
+                <div className="col-span-2 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">📧 Email</p>
+                  <p className="text-sm font-semibold text-slate-700 truncate">{selectedShiftGuard.email || "—"}</p>
+                </div>
+              </div>
+
+              {/* Weekly Schedule Grid */}
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">📆 Weekly Schedule</p>
+                <div className="grid grid-cols-7 gap-1">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, idx) => {
+                    const dayNum = idx; // 0=Mon, 1=Tue ... 6=Sun (matches dow in Shifts.jsx)
+                    const hasShift = (selectedShiftGuard.weeklyShifts || []).some(s => s.day_of_week === dayNum);
+                    const shift = (selectedShiftGuard.weeklyShifts || []).find(s => s.day_of_week === dayNum);
+                    return (
+                      <div
+                        key={day}
+                        title={hasShift ? `${shift?.shift_name} · ${shift?.start_time?.substring(0,5) || "—"} – ${shift?.end_time?.substring(0,5) || "—"}` : "No shift"}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition ${
+                          hasShift
+                            ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                            : "bg-slate-50 border-slate-100 text-slate-350"
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold uppercase">{day}</span>
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          hasShift ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-200 text-slate-400"
+                        }`}>
+                          {hasShift ? "✓" : "–"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {(selectedShiftGuard.weeklyShifts || []).length === 0 && (
+                  <p className="text-xs text-slate-400 text-center mt-2 font-medium">No weekly shifts assigned yet</p>
                 )}
               </div>
+
             </div>
+
 
             <div className="flex justify-end mt-6 pt-4 border-t border-gray-100">
               <button type="button" onClick={() => setSelectedShiftGuard(null)}

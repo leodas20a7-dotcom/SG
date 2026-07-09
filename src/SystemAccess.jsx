@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import CustomSelect from "./CustomSelect";
 import { ALL_NAV } from "./Sidebar";
+import ConfirmModal from "./ConfirmModal";
 import { FaCog, FaTimes, FaLock, FaCheck, FaEdit, FaTrash, FaEye, FaEyeSlash, FaUsersSlash } from "react-icons/fa";
 
 function SystemAccess({ companyId }) {
@@ -17,6 +18,7 @@ function SystemAccess({ companyId }) {
   const [editingUserId, setEditingUserId] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null); // holds the user object pending deletion
   const { showToast, ToastContainer } = useToast();
 
   async function fetchUsers() {
@@ -48,6 +50,12 @@ function SystemAccess({ companyId }) {
   async function addUser() {
     if (!validate()) return;
 
+    // Company ID is mandatory — every sub-user must belong to a company
+    if (!companyId) {
+      showToast("Company ID is required. Cannot create user without a company context.", "error");
+      return;
+    }
+
     if (editingUserId) {
       setLoading(true);
       try {
@@ -60,7 +68,27 @@ function SystemAccess({ companyId }) {
           showToast("Error updating profile: " + profileError.message, "error"); 
           return; 
         }
-        showToast(`User "${fullName.trim()}" updated!`, "success");
+
+        // ── Verify the update actually persisted (Supabase RLS can silently block writes) ──
+        const { data: verifyProfile } = await supabase
+          .from("profiles")
+          .select("allowed_pages")
+          .eq("id", editingUserId)
+          .maybeSingle();
+
+        const saved = verifyProfile?.allowed_pages;
+        const expected = selectedPages.length > 0 ? selectedPages : null;
+        const didSave = JSON.stringify((saved || []).slice().sort()) === JSON.stringify((expected || []).slice().sort());
+
+        if (!didSave) {
+          showToast(
+            "⚠️ Permissions could not be saved — your database policy may be blocking admin writes on other users' profiles. Please add an RLS UPDATE policy in Supabase that allows admins to update profiles within their company.",
+            "error"
+          );
+          return;
+        }
+
+        showToast(`User "${fullName.trim()}" updated successfully!`, "success");
         setFullName(""); setEmail(""); setPassword(""); setRole("supervisor"); setSelectedPages([]); setEditingUserId(null);
         fetchUsers();
       } catch (err) {
@@ -108,16 +136,46 @@ function SystemAccess({ companyId }) {
         return; 
       }
 
+      // ── CRITICAL: Update the profile BEFORE restoring the admin session ──
+      // After signUp(), the Supabase client holds the NEW USER's JWT.
+      // Supabase RLS policy is typically "auth.uid() = id" for profile updates.
+      // If we restore the admin session first, the update runs as admin (auth.uid() ≠ userId)
+      // and is silently blocked. By updating first, auth.uid() = userId → RLS passes.
+      let profileCreated = false;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await new Promise(r => setTimeout(r, 300));
+        const { data: checkProfile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("id", userId)
+          .maybeSingle();
+        if (checkProfile) { profileCreated = true; break; }
+      }
+
+      if (profileCreated) {
+        // Still under new user's JWT — RLS auth.uid()=userId passes ✓
+        const { error: updateErr } = await supabase
+          .from("profiles")
+          .update({
+            company_id: companyId,
+            allowed_pages: selectedPages.length > 0 ? selectedPages : null
+          })
+          .eq("id", userId);
+        if (updateErr) {
+          console.warn("Profile update failed:", updateErr.message);
+        }
+      } else {
+        console.warn("Profile row was not created within 3 seconds for user:", userId);
+        showToast("User created but permissions may not have saved. Please edit the user to reapply.", "info");
+      }
+
+      // NOW restore the admin session (after allowed_pages is already written)
       if (savedSession) {
         const { error: sessionErr } = await supabase.auth.setSession({
           access_token: savedSession.access_token,
           refresh_token: savedSession.refresh_token,
         });
         if (sessionErr) showToast("Session issue, please re-login.", "error");
-      }
-
-      if (selectedPages.length > 0) {
-        await supabase.from("profiles").update({ allowed_pages: selectedPages }).eq('id', userId);
       }
       
       // We are done with sensitive auth switching, allow App.jsx to react normally again
@@ -145,8 +203,13 @@ function SystemAccess({ companyId }) {
     setPassword("********"); // Dummy password display, not updated if untouched
   };
 
-  const deleteUser = async (user) => {
-    if (!window.confirm(`Are you sure you want to permanently delete ${user.name}?`)) return;
+  const deleteUser = (user) => {
+    setConfirmDelete(user);
+  };
+
+  const doDelete = async () => {
+    const user = confirmDelete;
+    setConfirmDelete(null);
     try {
       const { error } = await supabase.rpc('delete_auth_user', { target_user_id: user.id });
       if (error) {
@@ -169,6 +232,19 @@ function SystemAccess({ companyId }) {
   return (
     <>
       <ToastContainer />
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <ConfirmModal
+          message={`This will permanently delete "${confirmDelete.name}". This action cannot be undone.`}
+          confirmLabel="Delete User"
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={doDelete}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
       <div className="mt-2">
 
         <div className="glass-card rounded-2xl p-6 mb-8 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)] relative z-50">

@@ -147,11 +147,6 @@ function CircularFeed({ guardId, guardName, companyId }) {
     if (companyId) {
       query = query.eq("company_id", companyId);
     }
-    if (guardId) {
-      query = query.or(`is_broadcast.eq.true,guard_id.eq.${guardId}`);
-    } else {
-      query = query.eq("is_broadcast", true);
-    }
     query
       .then(({ data }) => {
         const finalData = data || [];

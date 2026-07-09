@@ -28,9 +28,7 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (role === "guard" && userGuardId) {
-        query = query.or(`is_broadcast.eq.true,guard_id.eq.${userGuardId}`);
-      } else if (["admin", "super_admin", "supervisor"].includes(role) && adminCompanyId) {
+      if (["admin", "super_admin", "supervisor", "guard"].includes(role) && adminCompanyId) {
         query = query.eq("company_id", adminCompanyId);
       } else if (role === "platform_admin") {
         // Platform admin sees all, no filter needed
@@ -62,8 +60,6 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
         {
           title: title.trim(),
           content: content.trim(),
-          created_by: user?.id,
-          is_broadcast: true,
           company_id: finalCompanyId,
         },
       ]);
@@ -148,7 +144,7 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
                   <span className="text-[11px] text-gray-405 whitespace-nowrap shrink-0">
                     {new Date(circ.created_at).toLocaleDateString([], { dateStyle: "medium" })}
                   </span>
-                  {role === "admin" && (
+                  {["admin", "super_admin"].includes(role) && (
                     <button
                       onClick={() => deleteCircular(circ.id)}
                       className="text-red-500 hover:text-red-700 font-semibold text-xs bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-xl transition"
@@ -210,7 +206,7 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
       <div className="mt-2">
 
         {/* Admin Broadcast Form */}
-        {role === "admin" && (
+        {["admin", "super_admin"].includes(role) && (
           <div className="glass-card rounded-2xl p-8 mb-8 border border-slate-200/80 shadow-[0_15px_30px_-10px_rgba(15,23,42,0.08)]">
             <div className="flex justify-between items-center mb-8">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -264,7 +260,7 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
         )}
 
         {/* Guards/Supervisors see the list directly */}
-        {role !== "admin" && <CircularsList />}
+        {!["admin", "super_admin"].includes(role) && <CircularsList />}
       </div>
 
       {/* History Overlay Modal */}

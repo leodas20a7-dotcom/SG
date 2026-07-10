@@ -13,6 +13,7 @@ import { useLanguage } from "./LanguageContext";
 import LoadingOverlay from "./LoadingOverlay";
 import { formatLocalTime, formatLocalDate } from "./lib/timeUtils";
 import { FaMapMarkerAlt, FaClipboardList, FaBell, FaBullhorn, FaPause, FaCamera, FaSatelliteDish, FaCheckCircle, FaCalendarDay, FaUser, FaSignOutAlt, FaPlay, FaCircle, FaExclamationTriangle } from "react-icons/fa";
+import { enhanceText } from "./lib/aiUtils";
 
 /* ─── helpers ─────────────────────────────────────── */
 function fmt(iso) {
@@ -498,6 +499,46 @@ function GuardDuty({ guardId, guardName, companyId }) {
 
   const [showProfile, setShowProfile] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [isEnhancingLeave, setIsEnhancingLeave] = useState(false);
+  const [isEnhancingCorrection, setIsEnhancingCorrection] = useState(false);
+
+  async function handleEnhanceLeave() {
+    if (!leaveReason.trim()) {
+      showToast("Please type a reason first to enhance.", "error");
+      return;
+    }
+    setIsEnhancingLeave(true);
+    try {
+      const systemPrompt = "You are a professional security employee. Rephrase the provided rough notes into a polite, clear, and formal leave request description for the company management. Keep it concise, formal, and output only the direct description text without headers, greetings, or sign-offs.";
+      const enhanced = await enhanceText(leaveReason, systemPrompt);
+      setLeaveReason(enhanced);
+      showToast("Leave reason enhanced by AI!", "success");
+    } catch (err) {
+      console.error("AI Enhance Error:", err);
+      showToast("Failed to enhance reason: " + err.message, "error");
+    } finally {
+      setIsEnhancingLeave(false);
+    }
+  }
+
+  async function handleEnhanceCorrection() {
+    if (!reqMessage.trim()) {
+      showToast("Please type some details first to enhance.", "error");
+      return;
+    }
+    setIsEnhancingCorrection(true);
+    try {
+      const systemPrompt = "You are a professional security guard. Rephrase the provided rough description of a check-in/out issue or GPS verification error into a polite, clear, and formal attendance correction request for the company administration. Keep it concise, formal, and output only the direct statement without headers, greetings, or sign-offs.";
+      const enhanced = await enhanceText(reqMessage, systemPrompt);
+      setReqMessage(enhanced);
+      showToast("Details enhanced by AI!", "success");
+    } catch (err) {
+      console.error("AI Enhance Error:", err);
+      showToast("Failed to enhance details: " + err.message, "error");
+    } finally {
+      setIsEnhancingCorrection(false);
+    }
+  }
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
 
   const [isOnTempDuty, setIsOnTempDuty] = useState(false);
@@ -1845,6 +1886,16 @@ function GuardDuty({ guardId, guardName, companyId }) {
                     rows={3}
                     className="w-full border border-gray-200 p-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-355 bg-white resize-none"
                   />
+                  <div className="flex justify-end mt-1">
+                    <button
+                      type="button"
+                      onClick={handleEnhanceLeave}
+                      disabled={isEnhancingLeave || !leaveReason.trim()}
+                      className="flex items-center gap-1.5 text-xs font-bold text-amber-600 hover:text-amber-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isEnhancingLeave ? "✨ Enhancing..." : "✨ AI Enhance"}
+                    </button>
+                  </div>
                 </div>
 
                 {error && <p className="text-red-500 text-xs">{error}</p>}
@@ -2166,6 +2217,16 @@ function GuardDuty({ guardId, guardName, companyId }) {
                       onChange={e => setReqMessage(e.target.value)}
                       className="w-full border border-gray-200 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
                     />
+                    <div className="flex justify-end mt-1">
+                      <button
+                        type="button"
+                        onClick={handleEnhanceCorrection}
+                        disabled={isEnhancingCorrection || !reqMessage.trim()}
+                        className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isEnhancingCorrection ? "✨ Enhancing..." : "✨ AI Enhance"}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl p-5 text-center space-y-3">

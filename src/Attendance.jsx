@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import Camera from "./Camera";
@@ -25,6 +26,18 @@ function Attendance({ role, userGuardId, hideHistory, companyId }) {
   const [gpsStatus, setGpsStatus] = useState(null);
   const trackingRef = useRef(null);
   const [previewPhoto, setPreviewPhoto] = useState(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    if (previewPhoto) {
+      setIsPreviewLoading(true);
+      setImageError(false);
+    } else {
+      setIsPreviewLoading(false);
+      setImageError(false);
+    }
+  }, [previewPhoto]);
 
   // Filters state
   const [filterGuard, setFilterGuard] = useState("");
@@ -629,13 +642,40 @@ function Attendance({ role, userGuardId, hideHistory, companyId }) {
       <ToastContainer />
       {loading && <LoadingOverlay message={gpsStatus || "Processing attendance..."} />}
       {showCamera && <Camera onCapture={onCameraCapture} onClose={() => { setShowCamera(false); setCameraMode(null); setLoading(false); setGpsStatus(null); }} />}
-      {previewPhoto && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60" onClick={() => setPreviewPhoto(null)}>
-          <div className="relative max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setPreviewPhoto(null)} className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-gray-600 hover:text-gray-900 text-lg z-10">&times;</button>
-            <img src={previewPhoto} alt="Attendance photo" className="w-full rounded-2xl shadow-2xl" />
+      {previewPhoto && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm" onClick={() => setPreviewPhoto(null)}>
+          <div className={`relative w-full mx-4 flex flex-col items-center justify-center transition-all duration-300 ${imageError || isPreviewLoading ? "max-w-md" : "max-w-2xl"}`} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setPreviewPhoto(null)} className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center text-gray-700 hover:text-gray-955 hover:scale-105 transition text-lg font-bold z-50">&times;</button>
+            
+            {isPreviewLoading && (
+              <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-8 flex flex-col items-center justify-center shadow-2xl border border-gray-150/50 dark:border-slate-800/50 max-w-md w-full text-center">
+                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-gray-800 dark:text-gray-200 font-bold text-sm tracking-wide">✨ Downloading photo from secure database...</p>
+                <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">This might take a moment depending on connection speed.</p>
+              </div>
+            )}
+
+            {imageError && (
+              <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-8 flex flex-col items-center justify-center shadow-2xl border border-gray-150/50 dark:border-slate-800/50 max-w-md w-full text-center">
+                <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4 text-2xl">⚠️</div>
+                <p className="text-gray-800 dark:text-gray-200 font-bold text-sm tracking-wide">Photo Not Found</p>
+                <p className="text-gray-550 dark:text-gray-400 text-xs mt-2 leading-relaxed">
+                  The selfie image for this record could not be loaded from Supabase storage. 
+                  It may not have been fully uploaded during the database migration or was archived.
+                </p>
+              </div>
+            )}
+
+            <img 
+              src={previewPhoto} 
+              alt="Attendance photo" 
+              onLoad={() => setIsPreviewLoading(false)}
+              onError={() => { setIsPreviewLoading(false); setImageError(true); }}
+              className={`w-full rounded-2xl shadow-2xl transition-all duration-300 ${isPreviewLoading || imageError ? "opacity-0 h-0 scale-95" : "opacity-100 scale-100"}`} 
+            />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {confirmConfig && (
         <ConfirmModal

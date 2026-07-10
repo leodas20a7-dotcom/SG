@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { FaBullhorn, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
 import { useToast } from './Toast';
+import { enhanceText } from './lib/aiUtils';
 
 function GlobalBroadcasts() {
   const { showToast, ToastContainer } = useToast();
@@ -14,6 +15,26 @@ function GlobalBroadcasts() {
   
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+
+  async function handleEnhance() {
+    if (!broadcastMessage.trim()) {
+      showToast("Please type some rough notes first to enhance.", "error");
+      return;
+    }
+    setIsEnhancing(true);
+    try {
+      const systemPrompt = "You are a professional security and communications administrator. Rephrase the provided rough notes into a formal, clear, and professional global announcement broadcast message for all system users and organizations. Keep it concise, formal, and authoritative, and output only the direct message without headers, markdown, or greetings.";
+      const enhanced = await enhanceText(broadcastMessage, systemPrompt);
+      setBroadcastMessage(enhanced);
+      showToast("Message enhanced by AI!", "success");
+    } catch (err) {
+      console.error("AI Enhance Error:", err);
+      showToast("Failed to enhance message: " + err.message, "error");
+    } finally {
+      setIsEnhancing(false);
+    }
+  }
 
   // Modals State
   const [editModal, setEditModal] = useState(null); // stores the broadcast object being edited
@@ -206,6 +227,16 @@ function GlobalBroadcasts() {
                   className="w-full h-24 border border-gray-200 dark:border-slate-600 rounded-xl p-4 bg-gray-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
                   required
                 ></textarea>
+                <div className="flex justify-end mt-1">
+                  <button
+                    type="button"
+                    onClick={handleEnhance}
+                    disabled={isEnhancing || !broadcastMessage.trim()}
+                    className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition dark:text-indigo-400 dark:hover:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isEnhancing ? "✨ Enhancing..." : "✨ AI Enhance"}
+                  </button>
+                </div>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">

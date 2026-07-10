@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import LoadingOverlay from "./LoadingOverlay";
 import ConfirmModal from "./ConfirmModal";
+import { enhanceText } from "./lib/aiUtils";
 
 function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
   const [circulars, setCirculars] = useState([]);
@@ -11,7 +12,27 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
   const [companyId, setCompanyId] = useState(adminCompanyId || null);
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const { showToast, ToastContainer } = useToast();
+
+  async function handleEnhance() {
+    if (!content.trim()) {
+      showToast("Please type some rough notes first to enhance.", "error");
+      return;
+    }
+    setIsEnhancing(true);
+    try {
+      const systemPrompt = "You are a professional security operations manager. Rephrase the provided rough notes into a formal, clear, and professional company circular announcement message for security personnel. Structure it well (with bullet points if appropriate), use professional language, and output only the direct announcement text without headers, markdown intro, or greetings.";
+      const enhanced = await enhanceText(content, systemPrompt);
+      setContent(enhanced);
+      showToast("Circular content enhanced by AI!", "success");
+    } catch (err) {
+      console.error("AI Enhance Error:", err);
+      showToast("Failed to enhance content: " + err.message, "error");
+    } finally {
+      setIsEnhancing(false);
+    }
+  }
 
   // Filters & Pagination state
   const [searchQuery, setSearchQuery] = useState("");
@@ -245,6 +266,16 @@ function Circulars({ role, userGuardId, companyId: adminCompanyId }) {
                   rows="5"
                   className="w-full border px-4 py-3 rounded-xl focus:outline-none focus:ring-4 transition text-sm bg-[#F4F6F9] hover:bg-slate-100/60 focus:bg-white border-slate-200 focus:ring-blue-500/10 focus:border-blue-500"
                 />
+                <div className="flex justify-end mt-1">
+                  <button
+                    type="button"
+                    onClick={handleEnhance}
+                    disabled={isEnhancing || !content.trim()}
+                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isEnhancing ? "✨ Enhancing..." : "✨ AI Enhance"}
+                  </button>
+                </div>
               </div>
               <button
                 type="submit"

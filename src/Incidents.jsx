@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import { addToQueue, getCached, setCached } from "./lib/offlineDb";
@@ -45,6 +46,18 @@ function Incidents({ role, currentGuardId, companyId: adminCompanyId }) {
   const [showHistory, setShowHistory] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
+  const [isLightboxLoading, setIsLightboxLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    if (lightboxImg) {
+      setIsLightboxLoading(true);
+      setImageError(false);
+    } else {
+      setIsLightboxLoading(false);
+      setImageError(false);
+    }
+  }, [lightboxImg]);
   
   // Media states
   const [imageFile, setImageFile] = useState(null);
@@ -697,29 +710,52 @@ function Incidents({ role, currentGuardId, companyId: adminCompanyId }) {
       </div>
 
       {/* Image Lightbox Overlay */}
-      {lightboxImg && (
+      {lightboxImg && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.85)" }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: "rgba(0,0,0,0.80)" }}
           onClick={() => setLightboxImg(null)}
         >
           <div
-            className="relative max-w-3xl w-full"
+            className={`relative w-full flex flex-col items-center justify-center transition-all duration-300 ${imageError || isLightboxLoading ? "max-w-md" : "max-w-3xl"}`}
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setLightboxImg(null)}
-              className="absolute -top-10 right-0 text-white text-3xl font-bold hover:text-gray-300 transition"
+              className="absolute -top-10 right-0 text-white text-3xl font-bold hover:text-gray-355 hover:scale-105 transition"
             >
               ✕
             </button>
+            
+            {isLightboxLoading && (
+              <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-8 flex flex-col items-center justify-center shadow-2xl border border-gray-150/50 dark:border-slate-800/50 max-w-md w-full text-center">
+                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-gray-800 dark:text-gray-200 font-bold text-sm tracking-wide">✨ Downloading incident photo...</p>
+                <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">This might take a moment depending on connection speed.</p>
+              </div>
+            )}
+
+            {imageError && (
+              <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-8 flex flex-col items-center justify-center shadow-2xl border border-gray-150/50 dark:border-slate-800/50 max-w-md w-full text-center">
+                <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4 text-2xl">⚠️</div>
+                <p className="text-gray-800 dark:text-gray-200 font-bold text-sm tracking-wide">Photo Not Found</p>
+                <p className="text-gray-555 dark:text-gray-400 text-xs mt-2 leading-relaxed">
+                  The evidence image for this incident could not be loaded from Supabase storage. 
+                  It may not have been fully uploaded during the database migration or was archived.
+                </p>
+              </div>
+            )}
+
             <img
               src={lightboxImg}
               alt="Incident Evidence"
-              className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
+              onLoad={() => setIsLightboxLoading(false)}
+              onError={() => { setIsLightboxLoading(false); setImageError(true); }}
+              className={`w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl transition-all duration-300 ${isLightboxLoading || imageError ? "opacity-0 h-0 scale-95" : "opacity-100 scale-100"}`}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

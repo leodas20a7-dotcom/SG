@@ -48,7 +48,7 @@ function PlatformSettings() {
       
       <div className="flex justify-between items-end mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Platform Settings & Audit Logs</h2>
+          <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Platform Settings & Audit Logs (Updated)</h2>
           <p className="text-gray-500 mt-1">View major administrative actions across the platform.</p>
         </div>
         <button 

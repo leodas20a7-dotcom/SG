@@ -745,7 +745,7 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
               {page === "circulars" && canAccess("circulars") && <div className="tour-circulars-target w-full"><Circulars role={role} userGuardId={userGuardId} companyId={companyId} /></div>}
               {page === "correction-requests" && canAccess("correction-requests") && <div className="tour-requests-target w-full"><CorrectionRequests role={role} companyId={companyId} guardId={userGuardId} onNavigate={onNavigate} /></div>}
               {page === "billing" && canAccess("billing") && <div className="tour-billing-target w-full"><Billing companyId={companyId} /></div>}
-              {page === "settings" && canAccess("settings") && <Settings onStartTour={() => setTourStep(0)} />}
+              {page === "settings" && canAccess("settings") && role !== "platform_admin" && <Settings onStartTour={() => setTourStep(0)} />}
               {page === "settings" && role === "platform_admin" && <PlatformSettings />}
             </Suspense>
           </ErrorBoundary>

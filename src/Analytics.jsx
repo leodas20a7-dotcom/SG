@@ -75,8 +75,8 @@ function Analytics({ role, onNavigate, companyId }) {
   const { showToast, ToastContainer } = useToast();
   const { t } = useLanguage();
 
-  // Role restriction state
-  const isAdmin = role === "admin";
+  // Role restriction state (all admin and supervisory roles have access to reports & tabs)
+  const isAdmin = role !== "guard";
   const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "performance" | "patrol" | "attendance" | "incidents"
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileDashView, setMobileDashView] = useState("stats"); // "stats" | "analytics" | "actions"
@@ -752,7 +752,6 @@ function Analytics({ role, onNavigate, companyId }) {
           {/* Mobile Tab Trigger Bar */}
           <div className="md:hidden flex items-center justify-between bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Viewing:</span>
               <span className="font-bold text-gray-800 text-sm">
                 {activeTab === "dashboard" && `📊 ${t("summary_dashboard")}`}
                 {activeTab === "performance" && `🎖️ ${t("performance_tracking")}`}

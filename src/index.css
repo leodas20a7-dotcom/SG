@@ -16,6 +16,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Scale down the entire UI to match the 80% zoom look */
+html {
+  font-size: 80%; /* 1rem will now be 12.8px instead of 16px */
+}
+
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: #f8fafc;

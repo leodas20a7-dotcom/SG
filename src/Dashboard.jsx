@@ -713,7 +713,6 @@ function Dashboard({ role, userGuardId, companyId, allowedPages, page, onNavigat
                   ) : (
                     <>
                       <Analytics role={role} onNavigate={onNavigate} companyId={companyId} />
-                      {role !== "admin" && <Charts companyId={companyId} />}
                     </>
                   )}
                 </div>

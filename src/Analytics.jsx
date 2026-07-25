@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { useToast } from "./Toast";
 import { Bar, Pie, Line, Doughnut } from "react-chartjs-2";
+import Charts from "./Charts";
 import { FaUserShield, FaMapMarkerAlt, FaCircle, FaCalendarAlt } from "react-icons/fa";
 import { GiSiren } from "react-icons/gi";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, Polygon, useMap } from "react-leaflet";
@@ -78,6 +79,7 @@ function Analytics({ role, onNavigate, companyId }) {
   const isAdmin = role === "admin";
   const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "performance" | "patrol" | "attendance" | "incidents"
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileDashView, setMobileDashView] = useState("stats"); // "stats" | "analytics" | "actions"
 
     // Base counts (for simple dashboard view)
   const [totalGuards, setTotalGuards] = useState(0);
@@ -797,9 +799,46 @@ function Analytics({ role, onNavigate, companyId }) {
 
             {/* ─── SUMMARY DASHBOARD VIEW ─── */}
       {activeTab === "dashboard" && (
-        <div className="space-y-6 mb-10 animate-fade-in">
+        <div className="flex flex-col gap-6 mb-10 animate-fade-in">
+          {/* Quick Navigation Buttons (Mobile Only) */}
+          <div className="md:hidden flex items-center justify-between bg-slate-200/70 dark:bg-slate-800/80 p-1.5 rounded-2xl mb-4 shadow-inner border border-slate-300/50 dark:border-slate-700/50">
+            <button
+              onClick={() => setMobileDashView("stats")}
+              className={`flex-1 py-2.5 px-2 rounded-xl font-extrabold text-xs transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                mobileDashView === "stats"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-md scale-[1.02]"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <span className="text-sm">📊</span>
+              <span>Overview</span>
+            </button>
+            <button
+              onClick={() => setMobileDashView("analytics")}
+              className={`flex-1 py-2.5 px-2 rounded-xl font-extrabold text-xs transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                mobileDashView === "analytics"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-md scale-[1.02]"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <span className="text-sm">📈</span>
+              <span>Analytics</span>
+            </button>
+            <button
+              onClick={() => setMobileDashView("actions")}
+              className={`flex-1 py-2.5 px-2 rounded-xl font-extrabold text-xs transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                mobileDashView === "actions"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-md scale-[1.02]"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <span className="text-sm">⚡</span>
+              <span>Actions</span>
+            </button>
+          </div>
+
           {/* Top 5 Cards Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+          <div className={`gap-3 sm:gap-5 ${mobileDashView === "stats" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5" : "hidden md:grid md:grid-cols-5"}`}>
             {/* Card 1: Total Guards */}
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
               <div className="flex items-center justify-between">
@@ -853,7 +892,7 @@ function Analytics({ role, onNavigate, companyId }) {
             </div>
 
             {/* Card 5: Incidents Count */}
-            <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100">
+            <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all duration-300 border border-slate-100 col-span-2 sm:col-span-1">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-450 text-[10px] font-bold uppercase tracking-wider">{t("incidents_count")}</p>
@@ -867,9 +906,9 @@ function Analytics({ role, onNavigate, companyId }) {
           </div>
 
           {/* Middle Row: Line Chart + Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className={`grid-cols-1 lg:grid-cols-3 gap-6 ${mobileDashView !== "stats" ? "grid" : "hidden md:grid"} ${mobileDashView === "actions" ? "order-4 md:order-none" : ""}`}>
             {/* Performance Overview (2/3 width) */}
-            <div className="lg:col-span-2 glass-card rounded-2xl p-6 border border-slate-100 flex flex-col justify-between min-h-[380px]">
+            <div className={`lg:col-span-2 glass-card rounded-2xl p-6 border border-slate-100 flex-col justify-between min-h-[380px] ${mobileDashView === "analytics" ? "flex" : "hidden md:flex"}`}>
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-base font-bold text-slate-800">Performance Overview</h3>
@@ -957,7 +996,7 @@ function Analytics({ role, onNavigate, companyId }) {
             </div>
 
             {/* Recent Activity (1/3 width) */}
-            <div className="glass-card rounded-2xl p-6 border border-slate-100 flex flex-col justify-between min-h-[380px]">
+            <div className={`glass-card rounded-2xl p-6 border border-slate-100 flex-col justify-between min-h-[380px] ${mobileDashView === "actions" ? "flex" : "hidden md:flex"}`}>
               <div>
                 <div className="flex justify-between items-center mb-5">
                   <h3 className="text-base font-bold text-slate-800">Recent Activity</h3>
@@ -1008,9 +1047,9 @@ function Analytics({ role, onNavigate, companyId }) {
           </div>
 
           {/* Bottom Row: Patrol Status + Shift Overview + Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className={`grid-cols-1 md:grid-cols-3 gap-6 ${mobileDashView !== "stats" ? "grid" : "hidden md:grid"} ${mobileDashView === "actions" ? "order-3 md:order-none" : ""}`}>
             {/* Patrol Status (Doughnut Chart) */}
-            <div className="glass-card rounded-2xl p-6 border border-slate-100 flex flex-col justify-between min-h-[220px]">
+            <div className={`glass-card rounded-2xl p-6 border border-slate-100 flex-col justify-between min-h-[220px] ${mobileDashView === "analytics" ? "flex" : "hidden md:flex"}`}>
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-sm font-bold text-slate-800">Patrol Status</h3>
@@ -1082,7 +1121,7 @@ function Analytics({ role, onNavigate, companyId }) {
             </div>
 
             {/* Shift Overview (Horizontal progress bars) */}
-            <div className="glass-card rounded-2xl p-6 border border-slate-100 flex flex-col justify-between min-h-[220px]">
+            <div className={`glass-card rounded-2xl p-6 border border-slate-100 flex-col justify-between min-h-[220px] ${mobileDashView === "analytics" ? "flex" : "hidden md:flex"}`}>
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-sm font-bold text-slate-800">Shift Overview</h3>
@@ -1187,7 +1226,7 @@ function Analytics({ role, onNavigate, companyId }) {
             </div>
 
             {/* Quick Actions */}
-            <div className="glass-card rounded-2xl p-5 border border-slate-100 min-h-[220px] flex flex-col justify-between">
+            <div className={`glass-card rounded-2xl p-5 border border-slate-100 min-h-[220px] flex-col justify-between ${mobileDashView === "actions" ? "flex" : "hidden md:flex"}`}>
               <h3 className="text-sm font-bold text-slate-800 mb-3">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-3 flex-1">
                 {/* Live Tracking */}
@@ -1245,6 +1284,13 @@ function Analytics({ role, onNavigate, companyId }) {
               </div>
             </div>
           </div>
+
+          {/* System Overview & Incident Status Charts (Only on Analytics tab in mobile) */}
+          {role !== "admin" && (
+            <div className={mobileDashView === "analytics" ? "block" : "hidden md:block"}>
+              <Charts companyId={companyId} />
+            </div>
+          )}
         </div>
       )}
 
